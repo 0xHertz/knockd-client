@@ -4,6 +4,7 @@ use crate::db::Database;
 use crate::knock;
 use crate::launcher;
 use crate::models::{Connection, KnockStep, SshClient};
+use std::process::Command;
 
 pub struct AppState {
     pub db: Database,
@@ -57,13 +58,8 @@ pub fn knock_and_connect(state: State<AppState>, connection_id: i64) -> Result<S
     match conn.conn_type.as_str() {
         "ssh" => {
             let client = conn.ssh_client.clone().unwrap_or_else(|| "auto".into());
-            launcher::launch_ssh(
-                &client,
-                &conn.host,
-                conn.port.unwrap_or(22),
-                &conn.username.unwrap_or_default(),
-            )
-            .map(|msg| format!("{} | {}", result.message, msg))
+            let result = launch_ssh_or_custom(&client, &state, &conn, result.message);
+            result
         }
         "web" => {
             let url = conn.launch_uri.clone().unwrap_or_else(|| {
@@ -149,4 +145,33 @@ pub fn set_setting(state: State<AppState>, key: String, value: String) -> Result
         .db
         .set_setting(&key, &value)
         .map_err(|e| e.to_string())
+}
+
+fn launch_ssh_or_custom(
+    client: &str,
+    state: &State<AppState>,
+    conn: &Connection,
+    knock_msg: String,
+) -> Result<String, String> {
+    let custom_path = if let Ok(Some(json)) = state.db.get_setting("custom_ssh_paths") {
+        if let Ok(custom) = serde_json::from_str::<Vec<SshClient>>(&json) {
+            custom.iter().find(|c| c.name == client).and_then(|c| c.installed.then(|| c.path.clone()))
+        } else { None }
+    } else { None };
+
+    let launch_msg = if let Some(path) = custom_path {
+        Command::new(&path)
+            .spawn()
+            .map(|_| format!("Launched {} via custom path", client))
+            .map_err(|e| format!("Failed to launch {}: {}", client, e))?
+    } else {
+            launcher::launch_ssh(
+                client,
+                &conn.host,
+                conn.port.unwrap_or(22),
+                conn.username.as_deref().unwrap_or(""),
+            )?
+    };
+
+    Ok(format!("{} | {}", knock_msg, launch_msg))
 }

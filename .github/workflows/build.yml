@@ -45,8 +45,8 @@ jobs:
       - run: pnpm tauri build
       - shell: pwsh
         run: |
-          ls -R src-tauri/target/release/bundle/ 2>$null
-          ls -lh src-tauri/target/release/knockd-client.exe 2>$null
+          Get-ChildItem -Recurse src-tauri/target/release/bundle/ -ErrorAction SilentlyContinue
+          Get-ChildItem src-tauri/target/release/knockd-client.exe -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer

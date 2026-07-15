@@ -13,6 +13,7 @@ pub fn run() {
     env_logger::init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_dir = dirs::data_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from("."))

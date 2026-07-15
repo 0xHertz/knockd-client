@@ -475,15 +475,18 @@ fn detect_kitty() -> String {
 #[cfg(target_os = "windows")]
 fn detect_mobaxterm() -> String {
     let p = check_paths(&[
-        r"C:\Program Files (x86)\Mobatek\MobaXterm\MobaXterm.exe",
-        r"C:\Program Files\Mobatek\MobaXterm\MobaXterm.exe",
-        r"%USERPROFILE%\MobaXterm\MobaXterm.exe",
+        r"C:\Program Files (x86)\Mobatek\MobaXterm\MobaXterm*.exe",
+        r"C:\Program Files\Mobatek\MobaXterm\MobaXterm*.exe",
+        r"%USERPROFILE%\Downloads\MobaXterm*\MobaXterm*.exe",
+        r"%USERPROFILE%\Desktop\MobaXterm*\MobaXterm*.exe",
+        r"%USERPROFILE%\MobaXterm\MobaXterm*.exe",
+        r"%LOCALAPPDATA%\MobaXterm\MobaXterm*.exe",
     ]);
     if !p.is_empty() { return p; }
-    let r = query_registry_app_path("MobaXterm.exe");
+    let r = query_registry_app_path("MobaXterm*.exe");
     if !r.is_empty() { return r; }
     let dir = query_registry_install_dir(r"Mobatek\MobaXterm", "InstallDir");
-    if !dir.is_empty() { return format!("{}\\MobaXterm.exe", dir); }
+    if !dir.is_empty() { return format!("{}\\MobaXterm*.exe", dir); }
     String::new()
 }
 #[cfg(not(target_os = "windows"))]

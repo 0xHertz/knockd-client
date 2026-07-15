@@ -107,7 +107,7 @@ export default function App() {
         </div>
       )}
 
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsPanel onClose={() => { setShowSettings(false); refresh(); }} />}
 
       <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-700/30">
         <input
