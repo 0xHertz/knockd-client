@@ -214,13 +214,12 @@ pnpm exec eslint src/
 ```toml
 [dependencies]
 tauri = { version = "2", features = [] }        # Tauri 框架
-tauri-plugin-opener = "2"                        # URL 打开插件
-tauri-plugin-shell = "2"                         # Shell 命令插件
+tauri-plugin-dialog = "2"                        # 原生文件选择器
 rusqlite = { version = "0.31", features = ["bundled"] }  # SQLite (内置编译)
 serde = { version = "1", features = ["derive"] }  # 序列化
 serde_json = "1"                                  # JSON
 dirs = "5"                                        # 系统目录
-glob = "0.3"                                      # 文件通配 (Windows Xshell 检测)
+glob = "0.3"                                      # 文件通配 (Windows 检测)
 log = "0.4"                                       # 日志
 env_logger = "0.11"                               # 环境变量日志
 ```
@@ -475,89 +474,65 @@ Tauri 的 E2E 测试框架还在发展中。当前推荐手动测试清单：
 ### 8.1 本地平台构建
 
 ```bash
-# 生产构建 (自动检测当前平台)
 pnpm tauri build
-
-# 产物位置:
-# Linux:   src-tauri/target/release/knockd-client
-#          src-tauri/target/release/bundle/deb/*.deb
-# Windows: src-tauri/target/release/knockd-client.exe
-#          src-tauri/target/release/bundle/msi/*.msi
-# macOS:   src-tauri/target/release/bundle/macos/*.app
-#          src-tauri/target/release/bundle/dmg/*.dmg
 ```
 
-### 8.2 Linux .deb 手动打包
+**Bundles 配置** (`tauri.conf.json`):
+```json
+"bundle": {
+    "active": true,
+    "targets": "all",
+    "linux": { "deb": { "depends": [...] } },
+    "windows": { "webviewInstallMode": { "type": "embedBootstrapper" } }
+}
+```
+
+| 平台 | 产物 |
+|------|------|
+| **Linux** | `.deb` + `.rpm` + `.AppImage` |
+| **Windows** | `.msi` + `.exe` NSIS 安装包（含 WebView2 引导） |
+| **macOS** | `.dmg` + `.app` |
+
+### 8.2 Linux 手动打包 .deb
 
 ```bash
-# 1. 安装 nsis (用于 Windows) 和 dpkg-dev (用于 deb)
-sudo apt install dpkg-dev
+mkdir -p packaging/deb/DEBIAN packaging/deb/usr/bin \
+  packaging/deb/usr/share/applications \
+  packaging/deb/usr/share/icons/hicolor/256x256/apps
 
-# 2. 创建打包目录结构
-mkdir -p packaging/deb/DEBIAN
-mkdir -p packaging/deb/usr/bin
-mkdir -p packaging/deb/usr/share/applications
-mkdir -p packaging/deb/usr/share/icons/hicolor/256x256/apps
-
-# 3. 编写 DEBIAN/control
 cat > packaging/deb/DEBIAN/control << 'EOF'
 Package: knockd-client
 Version: 0.1.0
-Section: utils
-Priority: optional
 Architecture: amd64
-Depends: libwebkit2gtk-4.1-0, libgtk-3-0
-Maintainer: Your Name <email>
-Description: Port knocking client with SSH/web launcher
+Depends: libwebkit2gtk-4.1-0, libgtk-3-0, libayatana-appindicator3-1
+Description: Cross-platform port knocking client with SSH/web launcher
 EOF
 
-# 4. 复制二进制
 cp src-tauri/target/release/knockd-client packaging/deb/usr/bin/
+cp src-tauri/icons/128x128.png packaging/deb/usr/share/icons/hicolor/256x256/apps/knockd-client.png
 chmod 755 packaging/deb/usr/bin/knockd-client
-
-# 5. 创建 .desktop 文件
-cat > packaging/deb/usr/share/applications/knockd-client.desktop << 'EOF'
-[Desktop Entry]
-Name=Knockd Client
-Exec=knockd-client
-Icon=knockd-client
-Terminal=false
-Type=Application
-Categories=Network;
-EOF
-
-# 6. 复制图标
-cp src-tauri/icons/128x128.png \
-   packaging/deb/usr/share/icons/hicolor/256x256/apps/knockd-client.png
-
-# 7. 构建 .deb
 dpkg-deb --build packaging/deb knockd-client_0.1.0_amd64.deb
 ```
 
 ### 8.3 Windows 交叉编译
 
 ```bash
-# 1. 安装 MinGW 交叉编译工具
+# 安装 MinGW + Rust target
 sudo apt install gcc-mingw-w64-x86-64
-
-# 2. 安装 Rust Windows 目标
 rustup target add x86_64-pc-windows-gnu
 
-# 3. 构建前端 (需要先)
+# 使用完整 Tauri 流水线（嵌入前端）
 pnpm build
-
-# 4. 交叉编译
-cd src-tauri
-cargo build --release --target x86_64-pc-windows-gnu
-
-# 产物: target/x86_64-pc-windows-gnu/release/knockd-client.exe
+pnpm tauri build --target x86_64-pc-windows-gnu
+# NSIS 打包会失败（Linux 无 makensis），但二进制已正确嵌入前端
+# 产物: src-tauri/target/x86_64-pc-windows-gnu/release/knockd-client.exe
 ```
 
-**注意：** NSIS/MSI 安装包制作需要 Windows 环境。交叉编译只能得到裸 `.exe`。
+> **注意**: 裸 `cargo build --release --target` 不会执行 `beforeBuildCommand`，前端不嵌入 → 运行时出现 `localhost 拒绝连接`。必须用 `pnpm tauri build --target`。
 
 ### 8.4 macOS 构建
 
-macOS 必须在 macOS 上构建（Apple 代码签名要求）：
+必须在 macOS 上构建（Apple 代码签名要求）：
 ```bash
 pnpm tauri build  # 自动生成 .dmg
 ```
@@ -582,114 +557,33 @@ version = "0.2.0"
 
 ## 9. CI/CD
 
-### 9.1 GitHub Actions 工作流
+### 9.1 触发方式
 
-```yaml
-# .github/workflows/build.yml
-name: Build and Release
+| 触发 | 行为 |
+|------|------|
+| `git push --tags` (tag 以 `v` 开头) | 三平台构建 + 自动创建 GitHub Release |
+| workflow_dispatch (手动) | 三平台构建，产物在 Actions Artifacts 下载 |
 
-on:
-  push:
-    tags: ['v*']
-  workflow_dispatch:
+### 9.2 工作流架构
 
-jobs:
-  # ─── Linux ───
-  build-linux:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '18' }
-      - uses: pnpm/action-setup@v3
-        with: { version: '9' }
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Linux deps
-        run: |
-          sudo apt update
-          sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
-            libayatana-appindicator3-dev librsvg2-dev \
-            libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
-
-      - name: Install frontend deps
-        run: pnpm install
-
-      - name: Build
-        run: pnpm tauri build
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-deb
-          path: src-tauri/target/release/bundle/deb/*.deb
-
-  # ─── Windows ───
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '18' }
-      - uses: pnpm/action-setup@v3
-        with: { version: '9' }
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Install frontend deps
-        run: pnpm install
-
-      - name: Build
-        run: pnpm tauri build
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-exe
-          path: src-tauri/target/release/bundle/msi/*.msi
-
-  # ─── macOS ───
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '18' }
-      - uses: pnpm/action-setup@v3
-        with: { version: '9' }
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Install frontend deps
-        run: pnpm install
-
-      - name: Build
-        run: pnpm tauri build
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-dmg
-          path: src-tauri/target/release/bundle/dmg/*.dmg
-
-  # ─── Release ───
-  release:
-    needs: [build-linux, build-windows, build-macos]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    steps:
-      - uses: actions/download-artifact@v4
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            linux-deb/*.deb
-            windows-exe/*.msi
-            windows-exe/*.exe
-            macos-dmg/*.dmg
+```
+push tag v0.1.0
+    ├── build-linux   (ubuntu-24.04) ── .deb + .rpm + .AppImage
+    ├── build-windows (windows-latest) ── .msi + NSIS .exe (含 WebView2)
+    └── build-macos   (macos-latest) ── .dmg + .app
+              │
+              └── release job ── 收集所有产物 → GitHub Release
 ```
 
-### 9.2 分支策略
+### 9.3 产物清单
+
+| Job | 产物 |
+|-----|------|
+| **linux-deb** | `Knockd Client_*.deb`, `Knockd Client_*.rpm`, `Knockd Client_*.AppImage`, `knockd-client` |
+| **windows-installer** | `Knockd Client_*.msi`, `Knockd Client_*-setup.exe` (NSIS), `knockd-client.exe` |
+| **macos-dmg** | `Knockd Client_*.dmg`, `Knockd Client.app`, `knockd-client` |
+
+### 9.4 分支策略
 
 ```
 main              # 稳定版本

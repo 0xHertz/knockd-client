@@ -9,10 +9,12 @@ Built with **Tauri v2** (Rust + React + TypeScript + Tailwind CSS).
 - **Port Knocking** — Send UDP/TCP knock sequences before connecting (standard Linux knockd protocol)
 - **SSH Connection Manager** — Store and manage SSH connections with one-click knock + connect
 - **Web URL Launcher** — Knock then open websites in your default browser
-- **Multi-SSH-Client Support** — Auto-detects 10+ SSH clients: Windows Terminal, OpenSSH, PuTTY, KiTTY, MobaXterm, Xshell, NxShell, Bitvise, SecureCRT, Termius, iTerm2
-- **Cross-Platform** — Windows, macOS, and Linux
-- **SQLite Storage** — All connections stored locally in SQLite
-- **Dark Theme** — Modern dark UI with search, filter, and quick actions
+- **Multi-SSH-Client Support** — Auto-detects via filesystem + Windows Registry + manual override
+- **Custom SSH Clients** — File picker to add any SSH client not in default paths
+- **Cross-Platform** — Windows (native), macOS, Linux (.deb / .rpm / .AppImage)
+- **SQLite Storage** — All connections stored locally
+- **Dark Theme** — Modern UI with search, filter, and quick actions
+- **CI/CD** — GitHub Actions native builds for all three platforms
 
 ## Screenshots
 
@@ -22,11 +24,15 @@ Built with **Tauri v2** (Rust + React + TypeScript + Tailwind CSS).
 
 ### Download Pre-built Packages
 
-| Platform | Package |
-|----------|---------|
-| **Ubuntu/Debian** | `knockd-client_0.1.0_amd64.deb` |
-| **Windows** | `knockd-client_0.1.0_x64-setup.exe` (NSIS installer) |
-| **macOS** | *(coming soon)* |
+| Platform | Package | Source |
+|----------|---------|--------|
+| **Ubuntu/Debian** | `.deb` | [Releases](https://github.com/0xHertz/knockd-client/releases) |
+| **Fedora/RHEL** | `.rpm` | [Releases](https://github.com/0xHertz/knockd-client/releases) |
+| **Linux (any)** | `.AppImage` | [Releases](https://github.com/0xHertz/knockd-client/releases) |
+| **Windows** | `.exe` NSIS installer (with WebView2) | [Releases](https://github.com/0xHertz/knockd-client/releases) |
+| **macOS** | `.dmg` | [Releases](https://github.com/0xHertz/knockd-client/releases) |
+
+> **Windows note**: Requires [WebView2 Runtime](https://go.microsoft.com/fwlink/p/?LinkId=2124703) (pre-installed on Windows 11). The NSIS installer includes an embedded bootstrapper.
 
 ### Build from Source
 
@@ -34,7 +40,6 @@ Built with **Tauri v2** (Rust + React + TypeScript + Tailwind CSS).
 
 - **Rust** 1.88+ (via [rustup](https://rustup.rs))
 - **Node.js** 18+ and **pnpm**
-- **Tauri system dependencies** (see [Tauri docs](https://v2.tauri.app/start/prerequisites/))
 
 ```bash
 # Ubuntu/Debian
@@ -43,18 +48,11 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential libssl-dev \
   libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
 ```
 
-#### Build
-
 ```bash
-git clone <repo-url> knockd-client
+git clone https://github.com/0xHertz/knockd-client.git
 cd knockd-client
-
-# Install frontend dependencies
 pnpm install
-
-# Build for production
 pnpm tauri build
-
 # Binary at: src-tauri/target/release/knockd-client
 ```
 
@@ -70,7 +68,7 @@ pnpm tauri dev
 
 1. Click **+ New Connection**
 2. Choose **SSH** or **Web**
-3. Fill in host, port, username (for SSH) or launch URL (for Web)
+3. Fill in host, port, username (SSH) or launch URL (Web)
 4. Configure the **knock sequence** as JSON:
 
 ```json
@@ -79,56 +77,48 @@ pnpm tauri dev
 
 5. Click **Save**
 
-### Connecting
-
-1. Find your connection in the list (use search/filter if needed)
-2. Click **🚀 Knock & Connect**
-3. The app will: send knock packets → launch your SSH client or browser
-
 ### Knock Port JSON Format
-
-Each step specifies a protocol and port:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `protocol` | `"udp"` or `"tcp"` | Knock protocol (defaults to connection's default protocol if empty) |
+| `protocol` | `"udp"` or `"tcp"` | Per-step protocol (falls back to connection default) |
 | `port` | `number` | Target port (1-65535) |
 
-**Examples:**
-
-Single UDP knock:
 ```json
 [{"protocol":"udp","port":12345}]
-```
-
-Mixed TCP/UDP:
-```json
 [{"protocol":"tcp","port":4444},{"protocol":"udp","port":5555}]
-```
-
-Three-step sequence (standard Linux knockd):
-```json
-[{"protocol":"udp","port":7000},{"protocol":"tcp","port":8000},{"protocol":"udp","port":9000}]
 ```
 
 ### SSH Clients
 
-The app auto-detects available SSH clients on your system:
+Auto-detection priority (Windows):
 
-| Platform | Detected Clients |
-|----------|-----------------|
-| **Windows** | Windows Terminal, OpenSSH (ssh), PuTTY, KiTTY, MobaXterm, Xshell, NxShell, Bitvise SSH, SecureCRT, Termius |
-| **Linux** | OpenSSH (ssh), PuTTY, Termius |
+1. **Known paths** — `C:\Program Files\...`, `%LOCALAPPDATA%\...`, `Downloads\...`
+2. **Windows Registry** — `HKLM\SOFTWARE\...\App Paths` and vendor-specific keys
+3. **PATH** — `where.exe` lookup (suppressed console window)
+
+| Platform | Auto-detected Clients |
+|----------|----------------------|
+| **Windows** | Windows Terminal, OpenSSH, PuTTY, KiTTY, MobaXterm, Xshell, NxShell, Bitvise SSH, SecureCRT, Termius |
+| **Linux** | OpenSSH, PuTTY, Termius |
 | **macOS** | Terminal + ssh, iTerm2, Termius |
 
-You can set a preferred client in **Settings**, or let it auto-detect each time.
+### Custom SSH Clients
+
+If your SSH tool is not auto-detected (e.g. portable version, custom location):
+
+1. Open **Settings** → **Custom SSH Clients**
+2. Click **+ Add**
+3. Click **📂** to browse and select the `.exe`
+4. The name auto-fills from the filename (editable)
+5. Click **Save**
+
+The custom client then appears in the dropdown when creating/editing an SSH connection.
 
 ## Configuration
 
-All data is stored in SQLite at:
-
-| Platform | Path |
-|----------|------|
+| Platform | Database Path |
+|----------|--------------|
 | **Linux** | `~/.local/share/knockd-client/knockd.db` |
 | **macOS** | `~/Library/Application Support/knockd-client/knockd.db` |
 | **Windows** | `%APPDATA%\knockd-client\knockd.db` |
@@ -138,35 +128,40 @@ All data is stored in SQLite at:
 | Layer | Technology |
 |-------|-----------|
 | Desktop Framework | [Tauri v2](https://v2.tauri.app) |
-| Backend | Rust (rusqlite, serde, tokio) |
+| Backend | Rust (rusqlite, serde, dirs, glob) |
 | Frontend | React 18 + TypeScript + Vite |
 | Styling | Tailwind CSS 3 |
-| Database | SQLite (embedded, no server needed) |
-| Packaging | .deb (Linux), NSIS .exe (Windows) |
+| Database | SQLite (bundled, no server) |
+| Dialogs | tauri-plugin-dialog (native file picker) |
+| CI/CD | GitHub Actions (native builds per platform) |
 
 ## Project Structure
 
 ```
 knockd/
-├── src/                          # Frontend (React)
-│   ├── App.tsx                   # Main layout
-│   ├── api.ts                    # Tauri IPC bindings
-│   ├── types.ts                  # TypeScript interfaces
+├── .github/workflows/build.yml    # CI/CD pipeline
+├── src/                           # Frontend (React)
+│   ├── App.tsx                    # Main layout + state
+│   ├── api.ts                     # Tauri IPC bindings
+│   ├── types.ts                   # TypeScript interfaces
 │   └── components/
-│       ├── ConnectionCard.tsx     # Connection card with actions
-│       ├── ConnectionForm.tsx     # Add/edit modal form
-│       └── SettingsPanel.tsx     # Preferences panel
-├── src-tauri/                    # Backend (Rust)
+│       ├── ConnectionCard.tsx      # Card: knock/connect/edit/delete
+│       ├── ConnectionForm.tsx      # Modal: add/edit connection
+│       └── SettingsPanel.tsx       # Settings + custom SSH file picker
+├── src-tauri/                     # Backend (Rust)
 │   ├── src/
-│   │   ├── main.rs               # Entry point
-│   │   ├── lib.rs                # Tauri setup & commands
-│   │   ├── models.rs             # Data structures
-│   │   ├── db.rs                 # SQLite CRUD operations
-│   │   ├── knock.rs              # UDP/TCP port knocking
-│   │   ├── launcher.rs           # SSH client detection & launch
-│   │   └── commands.rs           # Tauri IPC command handlers
+│   │   ├── main.rs                # Entry point
+│   │   ├── lib.rs                 # Plugin setup + command registration
+│   │   ├── models.rs              # Connection, SshClient, KnockStep
+│   │   ├── db.rs                  # SQLite CRUD + schema init
+│   │   ├── knock.rs               # UDP/TCP port knocking engine
+│   │   ├── launcher.rs            # SSH detection (filesystem + registry) + launch
+│   │   └── commands.rs            # Tauri IPC handlers
+│   ├── capabilities/default.json  # Permissions (core, dialog)
 │   ├── Cargo.toml
 │   └── tauri.conf.json
+├── DEVELOPMENT.md                 # Full development guide
+├── README.md
 ├── package.json
 └── vite.config.ts
 ```
@@ -177,6 +172,6 @@ MIT
 
 ## Acknowledgments
 
-- [knockd](https://github.com/jvinet/knock) — The original port knocking daemon
+- [knockd](https://github.com/jvinet/knock) — Original port knocking daemon
 - [Tauri](https://tauri.app) — Cross-platform desktop framework
-- [Knock on Ports](https://github.com/impalex/knockonports) — Inspiration for the multi-protocol knock format
+- [Knock on Ports](https://github.com/impalex/knockonports) — Multi-protocol knock format inspiration
