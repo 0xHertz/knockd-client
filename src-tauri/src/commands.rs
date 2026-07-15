@@ -159,18 +159,42 @@ fn launch_ssh_or_custom(
         } else { None }
     } else { None };
 
+    let user_host = if let Some(u) = &conn.username {
+        format!("{}@{}", u, conn.host)
+    } else {
+        conn.host.clone()
+    };
+    let port = conn.port.unwrap_or(22);
+
     let launch_msg = if let Some(path) = custom_path {
+        let name = std::path::Path::new(&path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        let url = format!("ssh://{}:{}", user_host, port);
+        let args: &[&str] = match name.as_str() {
+            n if n.contains("putty") || n.contains("kitty") =>
+                &["-ssh", &user_host, "-P", &port.to_string()],
+            n if n.contains("xshell") || n.contains("nxshell") =>
+                &["-url", &url],
+            n if n.contains("mobaxterm") =>
+                &["-newtab", &url],
+            n if n.contains("securecrt") =>
+                &["/SSH2", "/L", conn.username.as_deref().unwrap_or(""), &conn.host, "/P", &port.to_string()],
+            n if n.contains("bitvise") =>
+                &["-host", &conn.host, "-port", &port.to_string(), "-user", conn.username.as_deref().unwrap_or("")],
+            n if n.contains("termius") =>
+                &["ssh", &user_host],
+            _ => &[url.as_str()],
+        };
         Command::new(&path)
+            .args(args)
             .spawn()
-            .map(|_| format!("Launched {} via custom path", client))
+            .map(|_| format!("Launched {} (custom)", client))
             .map_err(|e| format!("Failed to launch {}: {}", client, e))?
     } else {
-            launcher::launch_ssh(
-                client,
-                &conn.host,
-                conn.port.unwrap_or(22),
-                conn.username.as_deref().unwrap_or(""),
-            )?
+        launcher::launch_ssh(client, &conn.host, port, conn.username.as_deref().unwrap_or(""))?
     };
 
     Ok(format!("{} | {}", knock_msg, launch_msg))
