@@ -121,8 +121,21 @@ pub fn validate_ports_json(ports_json: String) -> Result<Vec<KnockStep>, String>
 }
 
 #[tauri::command]
-pub fn detect_clients() -> Vec<SshClient> {
-    launcher::detect_ssh_clients()
+pub fn detect_clients(state: State<AppState>) -> Vec<SshClient> {
+    let mut clients = launcher::detect_ssh_clients();
+    if let Ok(Some(json)) = state.db.get_setting("custom_ssh_paths") {
+        if let Ok(custom) = serde_json::from_str::<Vec<SshClient>>(&json) {
+            for c in custom {
+                let installed = !c.path.is_empty()
+                    && std::path::Path::new(&c.path).exists();
+                clients.push(SshClient {
+                    installed,
+                    ..c
+                });
+            }
+        }
+    }
+    clients
 }
 
 #[tauri::command]

@@ -374,6 +374,70 @@ fn expand_env_vars(s: &str) -> String {
     result
 }
 
+// ── Registry queries (Windows) ────────────────────────────────────
+
+#[cfg(target_os = "windows")]
+fn query_registry_app_path(exe_name: &str) -> String {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let keys = [
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths",
+        r"HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths",
+    ];
+    for key in &keys {
+        let query = format!("{}\\{}", key, exe_name);
+        if let Ok(out) = Command::new("reg")
+            .args(["query", &query, "/ve"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+        {
+            if out.status.success() {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                for line in stdout.lines() {
+                    if let Some(pos) = line.find("REG_SZ") {
+                        let path = line[pos + 6..].trim();
+                        if Path::new(path).exists() {
+                            return path.to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    String::new()
+}
+
+#[cfg(target_os = "windows")]
+fn query_registry_install_dir(subkey: &str, value: &str) -> String {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let root_keys = [
+        r"HKLM\SOFTWARE",
+        r"HKLM\SOFTWARE\WOW6432Node",
+    ];
+    for root in &root_keys {
+        let full_key = format!("{}\\{}", root, subkey);
+        if let Ok(out) = Command::new("reg")
+            .args(["query", &full_key, "/v", value])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+        {
+            if out.status.success() {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                for line in stdout.lines() {
+                    if let Some(pos) = line.find("REG_SZ") {
+                        let dir = line[pos + 6..].trim();
+                        if !dir.is_empty() {
+                            return dir.to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    String::new()
+}
+
 // ── Per-client detectors (Windows) ───────────────────────────────
 
 #[cfg(target_os = "windows")]
@@ -382,7 +446,9 @@ fn check_putty() -> bool {
         r"C:\Program Files\PuTTY\putty.exe",
         r"C:\Program Files (x86)\PuTTY\putty.exe",
     ];
-    paths.iter().any(|p| Path::new(p).exists()) || which_installed("putty")
+    paths.iter().any(|p| Path::new(p).exists())
+        || !query_registry_app_path("putty.exe").is_empty()
+        || which_installed("putty")
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -393,11 +459,13 @@ fn check_putty() -> bool {
 
 #[cfg(target_os = "windows")]
 fn detect_kitty() -> String {
-    check_paths(&[
+    let p = check_paths(&[
         r"C:\Program Files\KiTTY\kitty.exe",
         r"C:\Program Files (x86)\KiTTY\kitty.exe",
         r"%LOCALAPPDATA%\KiTTY\kitty.exe",
-    ])
+    ]);
+    if !p.is_empty() { return p; }
+    query_registry_app_path("kitty.exe")
 }
 #[cfg(not(target_os = "windows"))]
 fn detect_kitty() -> String {
@@ -406,11 +474,17 @@ fn detect_kitty() -> String {
 
 #[cfg(target_os = "windows")]
 fn detect_mobaxterm() -> String {
-    check_paths(&[
+    let p = check_paths(&[
         r"C:\Program Files (x86)\Mobatek\MobaXterm\MobaXterm.exe",
         r"C:\Program Files\Mobatek\MobaXterm\MobaXterm.exe",
         r"%USERPROFILE%\MobaXterm\MobaXterm.exe",
-    ])
+    ]);
+    if !p.is_empty() { return p; }
+    let r = query_registry_app_path("MobaXterm.exe");
+    if !r.is_empty() { return r; }
+    let dir = query_registry_install_dir(r"Mobatek\MobaXterm", "InstallDir");
+    if !dir.is_empty() { return format!("{}\\MobaXterm.exe", dir); }
+    String::new()
 }
 #[cfg(not(target_os = "windows"))]
 fn detect_mobaxterm() -> String {
@@ -419,10 +493,16 @@ fn detect_mobaxterm() -> String {
 
 #[cfg(target_os = "windows")]
 fn detect_xshell() -> String {
-    check_paths(&[
+    let p = check_paths(&[
         r"C:\Program Files\NetSarang\Xshell*\Xshell.exe",
         r"C:\Program Files (x86)\NetSarang\Xshell*\Xshell.exe",
-    ])
+    ]);
+    if !p.is_empty() { return p; }
+    let r = query_registry_app_path("Xshell.exe");
+    if !r.is_empty() { return r; }
+    let dir = query_registry_install_dir(r"NetSarang\Xshell", "InstallDir");
+    if !dir.is_empty() { return format!("{}\\Xshell.exe", dir); }
+    String::new()
 }
 #[cfg(not(target_os = "windows"))]
 fn detect_xshell() -> String {
@@ -431,12 +511,14 @@ fn detect_xshell() -> String {
 
 #[cfg(target_os = "windows")]
 fn detect_nxshell() -> String {
-    check_paths(&[
+    let p = check_paths(&[
         r"C:\Program Files\NxShell\NxShell.exe",
         r"C:\Program Files (x86)\NxShell\NxShell.exe",
         r"%LOCALAPPDATA%\Programs\NxShell\NxShell.exe",
         r"%USERPROFILE%\AppData\Local\NxShell\NxShell.exe",
-    ])
+    ]);
+    if !p.is_empty() { return p; }
+    query_registry_app_path("NxShell.exe")
 }
 #[cfg(not(target_os = "windows"))]
 fn detect_nxshell() -> String {
@@ -445,10 +527,16 @@ fn detect_nxshell() -> String {
 
 #[cfg(target_os = "windows")]
 fn detect_bitvise() -> String {
-    check_paths(&[
+    let p = check_paths(&[
         r"C:\Program Files\Bitvise SSH Client\BvSsh.exe",
         r"C:\Program Files (x86)\Bitvise SSH Client\BvSsh.exe",
-    ])
+    ]);
+    if !p.is_empty() { return p; }
+    let r = query_registry_app_path("BvSsh.exe");
+    if !r.is_empty() { return r; }
+    let dir = query_registry_install_dir(r"Bitvise\SSH Client", "InstallDir");
+    if !dir.is_empty() { return format!("{}\\BvSsh.exe", dir); }
+    String::new()
 }
 #[cfg(not(target_os = "windows"))]
 fn detect_bitvise() -> String {
@@ -457,11 +545,17 @@ fn detect_bitvise() -> String {
 
 #[cfg(target_os = "windows")]
 fn detect_securecrt() -> String {
-    check_paths(&[
+    let p = check_paths(&[
         r"C:\Program Files\VanDyke Software\Clients\SecureCRT.exe",
         r"C:\Program Files\VanDyke Software\SecureCRT\SecureCRT.exe",
         r"C:\Program Files (x86)\VanDyke Software\SecureCRT\SecureCRT.exe",
-    ])
+    ]);
+    if !p.is_empty() { return p; }
+    let r = query_registry_app_path("SecureCRT.exe");
+    if !r.is_empty() { return r; }
+    let dir = query_registry_install_dir(r"VanDyke Software\SecureCRT", "InstallDir");
+    if !dir.is_empty() { return format!("{}\\SecureCRT.exe", dir); }
+    String::new()
 }
 #[cfg(not(target_os = "windows"))]
 fn detect_securecrt() -> String {

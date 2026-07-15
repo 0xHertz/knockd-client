@@ -44,6 +44,7 @@ impl Database {
             );
             INSERT OR IGNORE INTO settings (key, value) VALUES ('default_ssh_client', 'auto');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('default_knock_delay', '100');
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('custom_ssh_paths', '[]');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('theme', 'system');",
         )?;
         Ok(())
