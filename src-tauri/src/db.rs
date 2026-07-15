@@ -1,0 +1,185 @@
+use rusqlite::{params, Connection as SqliteConnection, Result as SqliteResult};
+use std::path::PathBuf;
+use std::sync::Mutex;
+
+use crate::models::Connection;
+
+pub struct Database {
+    conn: Mutex<SqliteConnection>,
+}
+
+impl Database {
+    pub fn new(app_dir: &PathBuf) -> SqliteResult<Self> {
+        std::fs::create_dir_all(app_dir).ok();
+        let db_path = app_dir.join("knockd.db");
+        let conn = SqliteConnection::open(db_path)?;
+        let db = Database {
+            conn: Mutex::new(conn),
+        };
+        db.initialize()?;
+        Ok(db)
+    }
+
+    fn initialize(&self) -> SqliteResult<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS connections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                conn_type TEXT NOT NULL CHECK(conn_type IN ('ssh', 'web')),
+                host TEXT NOT NULL,
+                port INTEGER,
+                username TEXT,
+                ssh_client TEXT DEFAULT 'auto',
+                knock_ports TEXT NOT NULL DEFAULT '[]',
+                knock_protocol TEXT DEFAULT 'udp',
+                knock_delay_ms INTEGER DEFAULT 100,
+                launch_uri TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('default_ssh_client', 'auto');
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('default_knock_delay', '100');
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('theme', 'system');",
+        )?;
+        Ok(())
+    }
+
+    pub fn list_connections(&self) -> SqliteResult<Vec<Connection>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, name, conn_type, host, port, username, ssh_client,
+                    knock_ports, knock_protocol, knock_delay_ms, launch_uri,
+                    created_at, updated_at
+             FROM connections ORDER BY updated_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Connection {
+                id: Some(row.get(0)?),
+                name: row.get(1)?,
+                conn_type: row.get(2)?,
+                host: row.get(3)?,
+                port: row.get(4)?,
+                username: row.get(5)?,
+                ssh_client: row.get(6)?,
+                knock_ports: row.get(7)?,
+                knock_protocol: row.get(8)?,
+                knock_delay_ms: row.get(9)?,
+                launch_uri: row.get(10)?,
+                created_at: row.get(11)?,
+                updated_at: row.get(12)?,
+            })
+        })?;
+        let mut connections = Vec::new();
+        for row in rows {
+            connections.push(row?);
+        }
+        Ok(connections)
+    }
+
+    pub fn get_connection(&self, id: i64) -> SqliteResult<Option<Connection>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, name, conn_type, host, port, username, ssh_client,
+                    knock_ports, knock_protocol, knock_delay_ms, launch_uri,
+                    created_at, updated_at
+             FROM connections WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query_map(params![id], |row| {
+            Ok(Connection {
+                id: Some(row.get(0)?),
+                name: row.get(1)?,
+                conn_type: row.get(2)?,
+                host: row.get(3)?,
+                port: row.get(4)?,
+                username: row.get(5)?,
+                ssh_client: row.get(6)?,
+                knock_ports: row.get(7)?,
+                knock_protocol: row.get(8)?,
+                knock_delay_ms: row.get(9)?,
+                launch_uri: row.get(10)?,
+                created_at: row.get(11)?,
+                updated_at: row.get(12)?,
+            })
+        })?;
+        match rows.next() {
+            Some(Ok(conn)) => Ok(Some(conn)),
+            _ => Ok(None),
+        }
+    }
+
+    pub fn insert_connection(&self, conn: &Connection) -> SqliteResult<i64> {
+        let db = self.conn.lock().unwrap();
+        db.execute(
+            "INSERT INTO connections (name, conn_type, host, port, username, ssh_client,
+             knock_ports, knock_protocol, knock_delay_ms, launch_uri)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                conn.name,
+                conn.conn_type,
+                conn.host,
+                conn.port,
+                conn.username,
+                conn.ssh_client,
+                conn.knock_ports,
+                conn.knock_protocol,
+                conn.knock_delay_ms,
+                conn.launch_uri,
+            ],
+        )?;
+        Ok(db.last_insert_rowid())
+    }
+
+    pub fn update_connection(&self, conn: &Connection) -> SqliteResult<()> {
+        let db = self.conn.lock().unwrap();
+        db.execute(
+            "UPDATE connections SET name=?1, conn_type=?2, host=?3, port=?4, username=?5,
+             ssh_client=?6, knock_ports=?7, knock_protocol=?8, knock_delay_ms=?9,
+             launch_uri=?10, updated_at=datetime('now')
+             WHERE id=?11",
+            params![
+                conn.name,
+                conn.conn_type,
+                conn.host,
+                conn.port,
+                conn.username,
+                conn.ssh_client,
+                conn.knock_ports,
+                conn.knock_protocol,
+                conn.knock_delay_ms,
+                conn.launch_uri,
+                conn.id,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_connection(&self, id: i64) -> SqliteResult<()> {
+        let db = self.conn.lock().unwrap();
+        db.execute("DELETE FROM connections WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn get_setting(&self, key: &str) -> SqliteResult<Option<String>> {
+        let db = self.conn.lock().unwrap();
+        let mut stmt = db.prepare("SELECT value FROM settings WHERE key = ?1")?;
+        let mut rows = stmt.query_map(params![key], |row| row.get(0))?;
+        match rows.next() {
+            Some(Ok(val)) => Ok(Some(val)),
+            _ => Ok(None),
+        }
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> SqliteResult<()> {
+        let db = self.conn.lock().unwrap();
+        db.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+            params![key, value],
+        )?;
+        Ok(())
+    }
+}

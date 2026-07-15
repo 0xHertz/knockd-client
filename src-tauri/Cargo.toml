@@ -1,0 +1,21 @@
+[package]
+name = "knockd-client"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "knockd_client_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+dirs = "5"
+glob = "0.3"
+log = "0.4"
+env_logger = "0.11"
