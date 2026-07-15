@@ -16,7 +16,7 @@ Built with **Tauri v2** (Rust + React + TypeScript + Tailwind CSS).
 
 ## Screenshots
 
-*(Add screenshots here after running the app)*
+![main](https://raw.githubusercontent.com/0xHertz/img/main/img/main.PNG)
 
 ## Installation
 
