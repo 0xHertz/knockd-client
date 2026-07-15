@@ -155,7 +155,7 @@ fn launch_ssh_or_custom(
 ) -> Result<String, String> {
     let custom_path = if let Ok(Some(json)) = state.db.get_setting("custom_ssh_paths") {
         if let Ok(custom) = serde_json::from_str::<Vec<SshClient>>(&json) {
-            custom.iter().find(|c| c.name == client).and_then(|c| c.installed.then(|| c.path.clone()))
+            custom.iter().find(|c| c.name == client).map(|c| c.path.clone())
         } else { None }
     } else { None };
 
