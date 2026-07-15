@@ -35,5 +35,6 @@ pub struct KnockStep {
 pub struct SshClient {
     pub name: String,
     pub path: String,
+    #[serde(default)]
     pub installed: bool,
 }
