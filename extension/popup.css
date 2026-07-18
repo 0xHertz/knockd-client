@@ -1,0 +1,18 @@
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0f172a;color:#e2e8f0;min-width:280px;max-width:320px}
+.container{padding:12px}
+header h1{font-size:14px;font-weight:700;color:#f1f5f9;margin-bottom:10px}
+.empty-state{text-align:center;padding:20px 0;color:#64748b;font-size:12px}
+.site-card{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;margin-bottom:6px;background:#1e293b;border-radius:8px;border:1px solid #334155}
+.site-info{flex:1;min-width:0}
+.site-name{font-size:12px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.site-url{font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.knock-btn{width:28px;height:28px;border:none;border-radius:6px;background:#334155;color:#94a3b8;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;margin-left:8px}
+.knock-btn:hover{background:#0ea5e9;color:#fff}
+.knock-btn.sending{background:#eab308;color:#fff}
+.knock-btn.success{background:#22c55e;color:#fff}
+.knock-btn.failed{background:#ef4444;color:#fff}
+footer{display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid #1e293b}
+.auto-check{display:flex;align-items:center;gap:6px;font-size:11px;color:#94a3b8;cursor:pointer}
+.auto-check input{accent-color:#0ea5e9}
+#status{font-size:10px;color:#64748b}

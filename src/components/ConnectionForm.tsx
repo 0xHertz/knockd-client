@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from "react";
 import type { Connection, SshClient } from "../types";
-import { saveConnection, validatePortsJson } from "../api";
+import { saveConnection, validatePortsJson, generateSiteKeys, saveSiteKey, enrollUserStart, enrollUserImport } from "../api";
 
 interface Props {
   connection: Connection | null;
@@ -23,17 +23,89 @@ const portHints: Record<string, string> = {
 
 export default function ConnectionForm({ connection, clients, onSave, onClose }: Props) {
   const [form, setForm] = useState<Connection>(connection || emptyForm);
+  const [spaMode, setSpaMode] = useState<"admin" | "user">("admin");
+  const [adminPubKey, setAdminPubKey] = useState("");
+  const [adminPrivKey, setAdminPrivKey] = useState("");
+  const [webProtocol, setWebProtocol] = useState<"https" | "http">("https");
+  const [spaResult, setSpaResult] = useState("");
+  const [userPubKey, setUserPubKey] = useState("");
+  const [importBlob, setImportBlob] = useState("");
   const [saving, setSaving] = useState(false);
   const [portError, setPortError] = useState("");
   const [showHints, setShowHints] = useState(false);
   const isKnockPass = (form.authMethod || "knockd") === "knockpass";
+
+  const handleEnrollAdmin = async () => {
+    if (!form.spaSiteId) return;
+    try {
+      const r = await generateSiteKeys(form.spaSiteId);
+      const parsed = JSON.parse(r);
+      setAdminPubKey(parsed.public_key);
+      setAdminPrivKey(parsed.private_key);
+      setSpaResult("Keys generated. Will be saved when you click Save.");
+    } catch (e) { setSpaResult(`Error: ${e}`); }
+  };
+
+  const loadUserIdentity = async () => {
+    try {
+      const r = await enrollUserStart("_", "_");
+      const parsed = JSON.parse(r);
+      setUserPubKey(parsed.x25519_public_key);
+    } catch { /* ignore */ }
+  };
+
+  const handleEnrollUserGen = async () => {
+    if (!form.spaSiteId || !form.name) return;
+    try {
+      const r = await enrollUserStart(form.spaSiteId, form.name);
+      const parsed = JSON.parse(r);
+      setUserPubKey(parsed.x25519_public_key);
+      setSpaResult(r);
+    } catch (e) { setSpaResult(`Error: ${e}`); }
+  };
+
+  const handleEnrollUserImport = async () => {
+    if (!form.spaSiteId || !importBlob) return;
+    try {
+      const r = await enrollUserImport(form.spaSiteId, form.name, form.launchUri || `${webProtocol}://${form.host}`, importBlob);
+      const parsed = JSON.parse(r);
+      if (parsed.private_key) setAdminPrivKey(parsed.private_key);
+      setSpaResult("Key decrypted. Will be saved when you click Save.");
+      setImportBlob("");
+      set("spaCredential", `kp_${form.spaSiteId}_priv`);
+    } catch (e) { setSpaResult(`Error: ${e}`); }
+  };
 
   useEffect(() => { if (connection) setForm(connection); }, [connection]);
 
   const set = (k: keyof Connection, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const validatePorts = async (json: string) => { set("knockPorts", json); if (!json.trim()) { setPortError(""); return; } try { await validatePortsJson(json); setPortError(""); } catch (e) { setPortError(String(e)); } };
   const handleTypeChange = (t: "ssh" | "web") => { set("connType", t); set("knockPorts", portHints[t] || emptyForm.knockPorts); setPortError(""); };
-  const handleSave = async (e: FormEvent) => { e.preventDefault(); if (!form.name.trim() || !form.host.trim()) return; setSaving(true); try { await saveConnection(form); onSave(); } catch (err) { setPortError(String(err)); } setSaving(false); };
+  const handleSave = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.host.trim()) return;
+    setSaving(true);
+    try {
+      const data = { ...form };
+      if (data.connType === "web" && !data.launchUri) {
+        const portStr = data.port ? `:${data.port}` : "";
+        data.launchUri = `${webProtocol}://${data.host}${portStr}`;
+      }
+      // Save site key to keyring when Save is clicked
+      if (data.authMethod === "knockpass") {
+        if (!adminPrivKey) {
+          setPortError("No private key! Click 'Generate Keys' first.");
+          setSaving(false);
+          return;
+        }
+        await saveSiteKey(data.spaSiteId!, adminPrivKey);
+        data.spaCredential = `kp_${data.spaSiteId}_priv`;
+      }
+      await saveConnection(data);
+      onSave();
+    } catch (err) { setPortError(String(err)); }
+    setSaving(false);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -59,18 +131,53 @@ export default function ConnectionForm({ connection, clients, onSave, onClose }:
           {form.connType === "ssh" && (<><div><label className="block text-xs font-medium text-slate-400 mb-1">Username</label><input type="text" value={form.username || ""} onChange={(e) => set("username", e.target.value || undefined)} placeholder="root" className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600/50 text-sm focus:outline-none focus:border-emerald-500/50" /></div>
           <div><label className="block text-xs font-medium text-slate-400 mb-1">SSH Client</label><select value={form.sshClient || "auto"} onChange={(e) => set("sshClient", e.target.value)} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600/50 text-sm focus:outline-none focus:border-emerald-500/50"><option value="auto">Auto-detect</option>{clients.filter((c) => c.installed).map((c) => (<option key={c.name} value={c.name}>{c.name}</option>))}</select></div></>)}
 
-          {form.connType === "web" && (<div><label className="block text-xs font-medium text-slate-400 mb-1">Launch URL</label><input type="url" value={form.launchUri || ""} onChange={(e) => set("launchUri", e.target.value || undefined)} placeholder={`https://${form.host || "example.com"}`} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600/50 text-sm focus:outline-none focus:border-emerald-500/50 font-mono" /></div>)}
+          {form.connType === "web" && (<div className="flex items-end gap-2"><div className="w-20"><label className="block text-xs font-medium text-slate-400 mb-1">Protocol</label><select value={webProtocol} onChange={(e) => setWebProtocol(e.target.value as "https"|"http")} className="w-full px-2 py-2 rounded-lg bg-slate-800 border border-slate-600/50 text-sm focus:outline-none focus:border-purple-500/50"><option value="https">https://</option><option value="http">http://</option></select></div><div className="flex-1"><label className="block text-xs font-medium text-slate-400 mb-1">URL Preview</label><input type="text" value={`${webProtocol}://${form.host || "example.com"}${form.port ? ":" + form.port : ""}`} readOnly className="w-full px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-600/50 text-sm focus:outline-none text-slate-400 font-mono" /></div></div>)}
 
           <div className="flex gap-2">
             <button type="button" onClick={() => { set("authMethod", "knockd"); set("knockPorts", portHints[form.connType] || emptyForm.knockPorts); }} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${!isKnockPass ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}>🔓 Port Knocking</button>
-            <button type="button" onClick={() => set("authMethod", "knockpass")} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${isKnockPass ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}>🔐 KnockPass SPA</button>
+            <button type="button" onClick={() => { set("authMethod", "knockpass"); if (!form.spaSiteId) set("spaSiteId", form.name || ""); }} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${isKnockPass ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}>🔐 KnockPass SPA</button>
           </div>
 
           {isKnockPass ? (
             <div className="space-y-3">
               <div><label className="block text-xs font-medium text-slate-400 mb-1">Site ID</label><input type="text" value={form.spaSiteId || ""} onChange={(e) => set("spaSiteId", e.target.value || undefined)} placeholder="my-site" className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600/50 text-sm focus:outline-none focus:border-amber-500/50" /></div>
-              <div><label className="block text-xs font-medium text-slate-400 mb-1">Credential (shared secret)</label><input type="password" value={form.spaCredential || ""} onChange={(e) => set("spaCredential", e.target.value || undefined)} placeholder="********" className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600/50 text-sm focus:outline-none focus:border-amber-500/50 font-mono" /></div>
-              <div><label className="block text-xs font-medium text-slate-400 mb-1">UDP Port</label><input type="number" value={form.spaUdpPort ?? ""} onChange={(e) => set("spaUdpPort", e.target.value ? Number(e.target.value) : undefined)} placeholder="12345" className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600/50 text-sm focus:outline-none focus:border-amber-500/50" /></div>
+
+              <div className="flex rounded-lg overflow-hidden border border-slate-600/50">
+                <button type="button" onClick={() => { setSpaMode("admin"); setSpaResult(""); }} className={`flex-1 py-1.5 text-xs font-medium transition-colors ${spaMode === "admin" ? "bg-amber-600/30 text-amber-300" : "bg-slate-800 text-slate-400 hover:text-slate-300"}`}>Admin</button>
+                <button type="button" onClick={() => { setSpaMode("user"); setSpaResult(""); loadUserIdentity(); }} className={`flex-1 py-1.5 text-xs font-medium transition-colors ${spaMode === "user" ? "bg-amber-600/30 text-amber-300" : "bg-slate-800 text-slate-400 hover:text-slate-300"}`}>User</button>
+              </div>
+
+              {spaMode === "admin" ? (
+                <div className="space-y-2">
+                  <button type="button" onClick={handleEnrollAdmin} className="w-full py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-medium transition-colors">🔑 Generate Keys</button>
+                  {spaResult && <p className="text-[11px] text-emerald-400">{spaResult}</p>}
+                  {adminPubKey && (
+                    <div className="space-y-2">
+                      <div>
+                        <div className="flex items-center justify-between mb-0.5"><label className="text-[10px] text-slate-400">Public Key → server config</label><button type="button" onClick={() => navigator.clipboard.writeText(adminPubKey)} className="text-[10px] text-amber-400 hover:text-amber-300">Copy</button></div>
+                        <pre className="text-[10px] text-slate-300 bg-slate-800 p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">{adminPubKey}</pre>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-0.5"><label className="text-[10px] text-slate-400">Private Key → kept in keyring</label><button type="button" onClick={() => navigator.clipboard.writeText(adminPrivKey)} className="text-[10px] text-amber-400 hover:text-amber-300">Copy</button></div>
+                        <pre className="text-[10px] text-slate-500 bg-slate-800/50 p-2 rounded overflow-x-auto whitespace-pre-wrap break-all max-h-20">{adminPrivKey.slice(0, 32)}...</pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <button type="button" onClick={handleEnrollUserGen} className="w-full py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-medium transition-colors">🔑 Generate X25519 Keys</button>
+                  {userPubKey && (
+                    <div>
+                      <div className="flex items-center justify-between mb-0.5"><label className="text-[10px] text-slate-400">Your X25519 Public Key → send to admin</label><button type="button" onClick={() => navigator.clipboard.writeText(userPubKey)} className="text-[10px] text-amber-400 hover:text-amber-300">Copy</button></div>
+                      <pre className="text-[10px] text-slate-300 bg-slate-800 p-2 rounded overflow-x-auto whitespace-pre-wrap break-all">{userPubKey}</pre>
+                    </div>
+                  )}
+                  <div><label className="block text-xs font-medium text-slate-400 mb-1">Paste Admin Encrypted Blob</label><textarea value={importBlob} onChange={(e) => setImportBlob(e.target.value)} rows={3} placeholder="From admin-tool output..." className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600/50 text-xs font-mono focus:outline-none focus:border-amber-500/50 resize-none" spellCheck={false} /></div>
+                  <button type="button" onClick={handleEnrollUserImport} className="w-full py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-medium transition-colors">🔓 Decrypt & Import</button>
+                </div>
+              )}
+
             </div>
           ) : (<>
             <div>

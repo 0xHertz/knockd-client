@@ -1,7 +1,7 @@
 mod commands;
-mod db;
+pub mod db;
 mod knock;
-mod knockpass;
+pub mod knockpass;
 mod launcher;
 mod models;
 
@@ -34,6 +34,10 @@ pub fn run() {
             commands::detect_clients,
             commands::get_setting,
             commands::set_setting,
+            commands::generate_site_keys,
+            commands::save_site_key,
+            commands::enroll_user_start,
+            commands::enroll_user_import,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

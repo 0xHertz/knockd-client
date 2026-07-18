@@ -51,6 +51,25 @@ impl Database {
             INSERT OR IGNORE INTO settings (key, value) VALUES ('custom_ssh_paths', '[]');
             INSERT OR IGNORE INTO settings (key, value) VALUES ('theme', 'system');",
         )?;
+        // Migration: add new columns if they don't exist yet
+        for (col, col_def) in &[
+            ("auth_method", "TEXT NOT NULL DEFAULT 'knockd'"),
+            ("spa_site_id", "TEXT"),
+            ("spa_credential", "TEXT"),
+            ("spa_udp_port", "INTEGER"),
+        ] {
+            let has_col: bool = conn
+                .prepare(&format!("SELECT COUNT(*) FROM pragma_table_info('connections') WHERE name='{}'", col))
+                .and_then(|mut s| s.query_row([], |r| r.get::<_, i64>(0)))
+                .map(|c| c > 0)
+                .unwrap_or(false);
+            if !has_col {
+                let _ = conn.execute_batch(&format!(
+                    "ALTER TABLE connections ADD COLUMN {} {};",
+                    col, col_def
+                ));
+            }
+        }
         Ok(())
     }
 

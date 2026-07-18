@@ -1,0 +1,9 @@
+{
+  "name": "com.knockd.client",
+  "description": "Knockd Client — SSH/web SPA auth gateway",
+  "path": "/usr/bin/knockd-client",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://*/"
+  ]
+}

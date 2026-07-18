@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- shield left - blue -->
+  <path d="M22 22 L64 22 L64 110 L36 96 Q22 92 22 78 Z" fill="#3b82f6"/>
+  <!-- shield right - dark blue -->
+  <path d="M64 22 L106 22 L106 78 Q106 92 92 96 L64 110 Z" fill="#1e3a8a"/>
+  <!-- shield outline -->
+  <path d="M22 22 L22 78 Q22 92 36 96 L64 110 L92 96 Q106 92 106 78 L106 22 Z"
+        fill="none" stroke="#10b981" stroke-width="4" stroke-linejoin="round"/>
+  <!-- keyhole -->
+  <circle cx="64" cy="56" r="10" fill="#10b981"/>
+  <path d="M59 56 L59 74 Q59 78 64 78 Q69 78 69 74 L69 56" fill="#10b981"/>
+  <!-- knock waves -->
+  <circle cx="22" cy="65" r="8" fill="none" stroke="#10b981" stroke-width="3" opacity="0.35"/>
+  <circle cx="22" cy="65" r="16" fill="none" stroke="#10b981" stroke-width="3" opacity="0.6"/>
+  <circle cx="22" cy="65" r="24" fill="none" stroke="#10b981" stroke-width="3" opacity="0.9"/>
+</svg>

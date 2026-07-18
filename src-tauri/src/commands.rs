@@ -48,8 +48,8 @@ pub fn knock_and_connect(state: State<AppState>, connection_id: i64) -> Result<S
         let site_id = conn.spa_site_id.as_deref().unwrap_or("");
         let credential = conn.spa_credential.as_deref().unwrap_or("");
         let udp_port = conn.spa_udp_port.unwrap_or(0);
-        if site_id.is_empty() || credential.is_empty() || udp_port == 0 {
-            return Err("KnockPass SPA requires site_id, credential, and UDP port".into());
+        if site_id.is_empty() || credential.is_empty() {
+            return Err("KnockPass SPA requires site_id and credential".into());
         }
         let msg = crate::knockpass::spa_knock(
             &conn.host,
@@ -59,6 +59,10 @@ pub fn knock_and_connect(state: State<AppState>, connection_id: i64) -> Result<S
             conn.username.as_deref().unwrap_or(""),
             &conn.host,
         )?;
+        if conn.conn_type == "web" {
+            let url = conn.launch_uri.as_deref().unwrap_or(&conn.host);
+            return launcher::launch_url(url).map(|m| format!("{} | {}", msg, m));
+        }
         return Ok(msg);
     }
 
@@ -164,6 +168,28 @@ pub fn set_setting(state: State<AppState>, key: String, value: String) -> Result
         .set_setting(&key, &value)
         .map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn generate_site_keys(site_id: String) -> Result<String, String> {
+    crate::knockpass::generate_site_keys(&site_id)
+}
+
+#[tauri::command]
+pub fn save_site_key(site_id: String, private_key: String) -> Result<(), String> {
+    crate::knockpass::save_site_key(&site_id, &private_key)
+}
+
+#[tauri::command]
+pub fn enroll_user_start(site_id: String, name: String) -> Result<String, String> {
+    crate::knockpass::enroll_user_start(&site_id, &name)
+}
+
+#[tauri::command]
+pub fn enroll_user_import(site_id: String, name: String, url: String, encrypted_blob: String) -> Result<String, String> {
+    crate::knockpass::enroll_user_import(&site_id, &name, &url, &encrypted_blob)
+}
+
+#[tauri::command]
 
 fn launch_ssh_or_custom(
     client: &str,
