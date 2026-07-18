@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod knock;
+mod knockpass;
 mod launcher;
 mod models;
 

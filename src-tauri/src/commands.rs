@@ -44,6 +44,24 @@ pub fn knock_and_connect(state: State<AppState>, connection_id: i64) -> Result<S
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Connection not found".to_string())?;
 
+    if conn.auth_method == "knockpass" {
+        let site_id = conn.spa_site_id.as_deref().unwrap_or("");
+        let credential = conn.spa_credential.as_deref().unwrap_or("");
+        let udp_port = conn.spa_udp_port.unwrap_or(0);
+        if site_id.is_empty() || credential.is_empty() || udp_port == 0 {
+            return Err("KnockPass SPA requires site_id, credential, and UDP port".into());
+        }
+        let msg = crate::knockpass::spa_knock(
+            &conn.host,
+            udp_port,
+            site_id,
+            credential,
+            conn.username.as_deref().unwrap_or(""),
+            &conn.host,
+        )?;
+        return Ok(msg);
+    }
+
     let result = knock::perform_knock(
         &conn.host,
         &conn.knock_ports,

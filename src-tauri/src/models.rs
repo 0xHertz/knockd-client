@@ -19,6 +19,14 @@ pub struct Connection {
     pub knock_delay_ms: i64,
     #[serde(rename = "launchUri")]
     pub launch_uri: Option<String>,
+    #[serde(rename = "authMethod", default)]
+    pub auth_method: String,
+    #[serde(rename = "spaSiteId")]
+    pub spa_site_id: Option<String>,
+    #[serde(rename = "spaCredential")]
+    pub spa_credential: Option<String>,
+    #[serde(rename = "spaUdpPort")]
+    pub spa_udp_port: Option<u16>,
     #[serde(rename = "createdAt")]
     pub created_at: Option<String>,
     #[serde(rename = "updatedAt")]

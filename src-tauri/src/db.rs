@@ -35,6 +35,10 @@ impl Database {
                 knock_protocol TEXT DEFAULT 'udp',
                 knock_delay_ms INTEGER DEFAULT 100,
                 launch_uri TEXT,
+                auth_method TEXT NOT NULL DEFAULT 'knockd',
+                spa_site_id TEXT,
+                spa_credential TEXT,
+                spa_udp_port INTEGER,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
@@ -55,6 +59,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, name, conn_type, host, port, username, ssh_client,
                     knock_ports, knock_protocol, knock_delay_ms, launch_uri,
+                    auth_method, spa_site_id, spa_credential, spa_udp_port,
                     created_at, updated_at
              FROM connections ORDER BY updated_at DESC",
         )?;
@@ -71,8 +76,12 @@ impl Database {
                 knock_protocol: row.get(8)?,
                 knock_delay_ms: row.get(9)?,
                 launch_uri: row.get(10)?,
-                created_at: row.get(11)?,
-                updated_at: row.get(12)?,
+                auth_method: row.get(11)?,
+                spa_site_id: row.get(12)?,
+                spa_credential: row.get(13)?,
+                spa_udp_port: row.get(14)?,
+                created_at: row.get(15)?,
+                updated_at: row.get(16)?,
             })
         })?;
         let mut connections = Vec::new();
@@ -87,6 +96,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, name, conn_type, host, port, username, ssh_client,
                     knock_ports, knock_protocol, knock_delay_ms, launch_uri,
+                    auth_method, spa_site_id, spa_credential, spa_udp_port,
                     created_at, updated_at
              FROM connections WHERE id = ?1",
         )?;
@@ -103,8 +113,12 @@ impl Database {
                 knock_protocol: row.get(8)?,
                 knock_delay_ms: row.get(9)?,
                 launch_uri: row.get(10)?,
-                created_at: row.get(11)?,
-                updated_at: row.get(12)?,
+                auth_method: row.get(11)?,
+                spa_site_id: row.get(12)?,
+                spa_credential: row.get(13)?,
+                spa_udp_port: row.get(14)?,
+                created_at: row.get(15)?,
+                updated_at: row.get(16)?,
             })
         })?;
         match rows.next() {
@@ -117,8 +131,9 @@ impl Database {
         let db = self.conn.lock().unwrap();
         db.execute(
             "INSERT INTO connections (name, conn_type, host, port, username, ssh_client,
-             knock_ports, knock_protocol, knock_delay_ms, launch_uri)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             knock_ports, knock_protocol, knock_delay_ms, launch_uri,
+             auth_method, spa_site_id, spa_credential, spa_udp_port)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![
                 conn.name,
                 conn.conn_type,
@@ -130,6 +145,10 @@ impl Database {
                 conn.knock_protocol,
                 conn.knock_delay_ms,
                 conn.launch_uri,
+                conn.auth_method,
+                conn.spa_site_id,
+                conn.spa_credential,
+                conn.spa_udp_port,
             ],
         )?;
         Ok(db.last_insert_rowid())
@@ -140,8 +159,9 @@ impl Database {
         db.execute(
             "UPDATE connections SET name=?1, conn_type=?2, host=?3, port=?4, username=?5,
              ssh_client=?6, knock_ports=?7, knock_protocol=?8, knock_delay_ms=?9,
-             launch_uri=?10, updated_at=datetime('now')
-             WHERE id=?11",
+             launch_uri=?10, auth_method=?11, spa_site_id=?12, spa_credential=?13,
+             spa_udp_port=?14, updated_at=datetime('now')
+             WHERE id=?15",
             params![
                 conn.name,
                 conn.conn_type,
@@ -153,6 +173,10 @@ impl Database {
                 conn.knock_protocol,
                 conn.knock_delay_ms,
                 conn.launch_uri,
+                conn.auth_method,
+                conn.spa_site_id,
+                conn.spa_credential,
+                conn.spa_udp_port,
                 conn.id,
             ],
         )?;

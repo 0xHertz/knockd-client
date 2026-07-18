@@ -10,6 +10,10 @@ export interface Connection {
   knockProtocol: string;
   knockDelayMs: number;
   launchUri?: string;
+  authMethod?: string;
+  spaSiteId?: string;
+  spaCredential?: string;
+  spaUdpPort?: number;
   createdAt?: string;
   updatedAt?: string;
 }
