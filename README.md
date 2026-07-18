@@ -1,177 +1,181 @@
 # Knockd Client
 
-A cross-platform desktop GUI client for managing SSH connections and web URLs with [port knocking](https://en.wikipedia.org/wiki/Port_knocking) support.
+Cross-platform desktop GUI for managing SSH and web connections with [port knocking](https://en.wikipedia.org/wiki/Port_knocking) and [Single Packet Authorization](https://en.wikipedia.org/wiki/Single-packet_authorization).
 
 Built with **Tauri v2** (Rust + React + TypeScript + Tailwind CSS).
 
 ## Features
 
-- **Port Knocking** — Send UDP/TCP knock sequences before connecting (standard Linux knockd protocol)
-- **SSH Connection Manager** — Store and manage SSH connections with one-click knock + connect
-- **Web URL Launcher** — Knock then open websites in your default browser
-- **Multi-SSH-Client Support** — Auto-detects via filesystem + Windows Registry + manual override
-- **Custom SSH Clients** — File picker to add any SSH client not in default paths
-- **Cross-Platform** — Windows (native), macOS, Linux (.deb / .rpm / .AppImage)
-- **SQLite Storage** — All connections stored locally
-- **Dark Theme** — Modern UI with search, filter, and quick actions
-- **CI/CD** — GitHub Actions native builds for all three platforms
-
-## Screenshots
-
-![main](https://raw.githubusercontent.com/0xHertz/img/main/img/main.PNG)
+- **Port Knocking** — UDP/TCP knock sequences (standard knockd protocol)
+- **KnockPass SPA** — Ed25519 signature + AES-256-GCM encrypted Single Packet Authorization
+- **Dynamic Port** — Time-based rotating UDP port (changes every 60s)
+- **Admin/User Enrollment** — Admin generates keys, users import encrypted keys via X25519 ECDH
+- **SSH + Web** — Knock then auto-launch SSH client or browser
+- **10+ SSH Clients** — Auto-detection via filesystem + Windows Registry + manual file picker
+- **Browser Extension** — Chrome/Edge popup with auto-knock on navigation, site list from desktop app
+- **Encrypted Key Storage** — AES-256-GCM with device-fingerprint-derived key, stored in SQLite
+- **Cross-Platform** — Linux (.deb/.rpm/.AppImage), Windows (.exe/.msi), macOS (.dmg)
+- **Dark Theme** — Modern UI with search, filter, quick actions
+- **CI/CD** — GitHub Actions native builds
 
 ## Installation
 
-### Download Pre-built Packages
+### Pre-built Packages
 
-| Platform | Package | Source |
-|----------|---------|--------|
+| Platform | Format | Source |
+|----------|--------|--------|
 | **Ubuntu/Debian** | `.deb` | [Releases](https://github.com/0xHertz/knockd-client/releases) |
 | **Fedora/RHEL** | `.rpm` | [Releases](https://github.com/0xHertz/knockd-client/releases) |
-| **Linux (any)** | `.AppImage` | [Releases](https://github.com/0xHertz/knockd-client/releases) |
-| **Windows** | `.exe` NSIS installer (with WebView2) | [Releases](https://github.com/0xHertz/knockd-client/releases) |
+| **Linux** | `.AppImage` | [Releases](https://github.com/0xHertz/knockd-client/releases) |
+| **Windows** | `.exe` NSIS installer | [Releases](https://github.com/0xHertz/knockd-client/releases) |
 | **macOS** | `.dmg` | [Releases](https://github.com/0xHertz/knockd-client/releases) |
 
-> **Windows note**: Requires [WebView2 Runtime](https://go.microsoft.com/fwlink/p/?LinkId=2124703) (pre-installed on Windows 11). The NSIS installer includes an embedded bootstrapper.
+> **Windows**: Requires [WebView2 Runtime](https://go.microsoft.com/fwlink/p/?LinkId=2124703) (pre-installed on Win11). NSIS installer embeds bootstrapper.
+
+### Browser Extension Setup
+
+```bash
+# Install native messaging host manifest
+sudo ./install/install-linux.sh <chrome-extension-id> [chrome|edge|chromium|brave]
+```
+
+Then load the extension: `chrome://extensions` → Developer mode → Load unpacked → select `extension/`
 
 ### Build from Source
 
-#### Prerequisites
-
-- **Rust** 1.88+ (via [rustup](https://rustup.rs))
-- **Node.js** 18+ and **pnpm**
-
 ```bash
-# Ubuntu/Debian
+# Prerequisites (Ubuntu/Debian)
 sudo apt install libwebkit2gtk-4.1-dev build-essential libssl-dev \
   libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
   libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
-```
 
-```bash
 git clone https://github.com/0xHertz/knockd-client.git
 cd knockd-client
 pnpm install
 pnpm tauri build
-# Binary at: src-tauri/target/release/knockd-client
-```
-
-#### Development
-
-```bash
-pnpm tauri dev
 ```
 
 ## Usage
 
-### Adding a Connection
+### Port Knocking (knockd)
 
-1. Click **+ New Connection**
-2. Choose **SSH** or **Web**
-3. Fill in host, port, username (SSH) or launch URL (Web)
-4. Configure the **knock sequence** as JSON:
+Create an SSH or Web connection → configure knock ports as JSON:
 
 ```json
 [{"protocol":"udp","port":7000},{"protocol":"tcp","port":8000},{"protocol":"udp","port":9000}]
 ```
 
-5. Click **Save**
+Click **🚀 Knock & Connect** → knock packets sent → SSH client or browser launches.
 
-### Knock Port JSON Format
+### KnockPass SPA
+
+#### Admin (Generate Site Keys)
+
+1. Create SSH or Web connection → select **🔐 KnockPass SPA**
+2. Choose **Admin** tab → **Generate Keys**
+3. Copy **Public Key** → configure on server
+4. Fill Site ID, host, port → **Save** (auto-encrypts private key to SQLite)
+
+#### User (Import Encrypted Key)
+
+1. Select **User** tab → **Generate X25519 Keys** (first time only)
+2. Copy X25519 public key → send to admin
+3. Admin encrypts site key (Settings → Admin Tool)
+4. Paste encrypted blob → **Decrypt & Import** → **Save**
+
+#### Admin Tool
+
+Settings → **Admin: Encrypt Site Key**: select site → paste user's X25519 public key → **Encrypt** (or **Batch CSV** for multiple users). Output copied or saved to file.
+
+### Knock Port JSON
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `protocol` | `"udp"` or `"tcp"` | Per-step protocol (falls back to connection default) |
+| `protocol` | `"udp"` or `"tcp"` | Per-step protocol |
 | `port` | `number` | Target port (1-65535) |
-
-```json
-[{"protocol":"udp","port":12345}]
-[{"protocol":"tcp","port":4444},{"protocol":"udp","port":5555}]
-```
 
 ### SSH Clients
 
-Auto-detection priority (Windows):
+Auto-detection: known paths → Windows Registry → PATH.
 
-1. **Known paths** — `C:\Program Files\...`, `%LOCALAPPDATA%\...`, `Downloads\...`
-2. **Windows Registry** — `HKLM\SOFTWARE\...\App Paths` and vendor-specific keys
-3. **PATH** — `where.exe` lookup (suppressed console window)
-
-| Platform | Auto-detected Clients |
-|----------|----------------------|
-| **Windows** | Windows Terminal, OpenSSH, PuTTY, KiTTY, MobaXterm, Xshell, NxShell, Bitvise SSH, SecureCRT, Termius |
+| Platform | Clients |
+|----------|---------|
+| **Windows** | Win Terminal, OpenSSH, PuTTY, KiTTY, MobaXterm, Xshell, NxShell, Bitvise, SecureCRT, Termius |
 | **Linux** | OpenSSH, PuTTY, Termius |
 | **macOS** | Terminal + ssh, iTerm2, Termius |
 
-### Custom SSH Clients
+Custom clients: Settings → **Custom SSH Clients** → 📂 select .exe.
 
-If your SSH tool is not auto-detected (e.g. portable version, custom location):
+### Browser Extension
 
-1. Open **Settings** → **Custom SSH Clients**
-2. Click **+ Add**
-3. Click **📂** to browse and select the `.exe`
-4. The name auto-fills from the filename (editable)
-5. Click **Save**
-
-The custom client then appears in the dropdown when creating/editing an SSH connection.
+- **Popup**: Shows SPA web sites from desktop app, manual knock button, auto-knock toggle
+- **Auto-intercept**: Navigating to protected URL → blocked page → auto-sends SPA → redirects
+- **Refresh**: Popup opens → fetches latest site list from native host via SQLite
 
 ## Configuration
 
-| Platform | Database Path |
-|----------|--------------|
-| **Linux** | `~/.local/share/knockd-client/knockd.db` |
-| **macOS** | `~/Library/Application Support/knockd-client/knockd.db` |
-| **Windows** | `%APPDATA%\knockd-client\knockd.db` |
+| Item | Path |
+|------|------|
+| **Database** | `~/.local/share/knockd-client/knockd.db` (Linux) |
+| **Extension manifest** | `~/.config/google-chrome/NativeMessagingHosts/com.knockd.client.json` |
+
+## Security
+
+| Layer | Mechanism |
+|-------|-----------|
+| SPA Encryption | AES-256-GCM |
+| SPA Signature | Ed25519 (or HMAC-SHA256 fallback) |
+| Key Storage | AES-256-GCM, key = SHA256(device fingerprint + pepper) |
+| Key Distribution | X25519 ECDH + AES-256-GCM (admin → user) |
+| Dynamic Port | HMAC-SHA256 time-slot based, changes every 60s |
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Desktop Framework | [Tauri v2](https://v2.tauri.app) |
-| Backend | Rust (rusqlite, serde, dirs, glob) |
-| Frontend | React 18 + TypeScript + Vite |
-| Styling | Tailwind CSS 3 |
-| Database | SQLite (bundled, no server) |
-| Dialogs | tauri-plugin-dialog (native file picker) |
-| CI/CD | GitHub Actions (native builds per platform) |
+| Framework | [Tauri v2](https://v2.tauri.app) |
+| Backend | Rust (rusqlite, ed25519-dalek, curve25519-dalek, aes-gcm, sha2, hmac) |
+| Frontend | React 18 + TypeScript + Vite + Tailwind CSS 3 |
+| Database | SQLite (bundled) |
+| Extension | Chrome Manifest V3, Native Messaging |
+| CI/CD | GitHub Actions |
 
 ## Project Structure
 
 ```
 knockd/
-├── .github/workflows/build.yml    # CI/CD pipeline
-├── src/                           # Frontend (React)
-│   ├── App.tsx                    # Main layout + state
-│   ├── api.ts                     # Tauri IPC bindings
-│   ├── types.ts                   # TypeScript interfaces
+├── src/                              # Frontend (React)
+│   ├── App.tsx / api.ts / types.ts
 │   └── components/
-│       ├── ConnectionCard.tsx      # Card: knock/connect/edit/delete
-│       ├── ConnectionForm.tsx      # Modal: add/edit connection
-│       └── SettingsPanel.tsx       # Settings + custom SSH file picker
-├── src-tauri/                     # Backend (Rust)
-│   ├── src/
-│   │   ├── main.rs                # Entry point
-│   │   ├── lib.rs                 # Plugin setup + command registration
-│   │   ├── models.rs              # Connection, SshClient, KnockStep
-│   │   ├── db.rs                  # SQLite CRUD + schema init
-│   │   ├── knock.rs               # UDP/TCP port knocking engine
-│   │   ├── launcher.rs            # SSH detection (filesystem + registry) + launch
-│   │   └── commands.rs            # Tauri IPC handlers
-│   ├── capabilities/default.json  # Permissions (core, dialog)
-│   ├── Cargo.toml
-│   └── tauri.conf.json
-├── DEVELOPMENT.md                 # Full development guide
-├── README.md
-├── package.json
-└── vite.config.ts
+│       ├── ConnectionCard.tsx         # Connection card with SPA badge
+│       ├── ConnectionForm.tsx         # Add/edit with KnockPass enrollment
+│       └── SettingsPanel.tsx          # Settings + admin tool + custom SSH
+├── src-tauri/                        # Backend (Rust)
+│   └── src/
+│       ├── main.rs                   # Entry + native host mode
+│       ├── lib.rs                    # Plugin setup + commands
+│       ├── models.rs                 # Connection, SshClient
+│       ├── db.rs                     # SQLite CRUD + migration
+│       ├── knock.rs                  # Port knocking
+│       ├── knockpass.rs              # SPA: Ed25519 + X25519 + AES + dyn port
+│       ├── crypto_store.rs           # AES-256-GCM encrypted key storage
+│       ├── spa_cmds.rs               # SPA encrypt/decrypt commands
+│       ├── launcher.rs               # SSH detection + launch
+│       └── commands.rs               # Tauri IPC handlers
+├── extension/                        # Browser Extension (Manifest V3)
+│   ├── manifest.json / background.js
+│   ├── popup.html/js/css
+│   ├── blocked.html/js/css
+│   ├── storage.js
+│   ├── icons/
+│   └── native-host/
+├── install/                          # Install scripts
+│   └── install-linux.sh
+├── .github/workflows/build.yml       # CI/CD
+├── DEVELOPMENT.md
+└── README.md
 ```
 
 ## License
 
 MIT
-
-## Acknowledgments
-
-- [knockd](https://github.com/jvinet/knock) — Original port knocking daemon
-- [Tauri](https://tauri.app) — Cross-platform desktop framework
-- [Knock on Ports](https://github.com/impalex/knockonports) — Multi-protocol knock format inspiration

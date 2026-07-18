@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from "react";
 import type { Connection, SshClient } from "../types";
-import { saveConnection, validatePortsJson, generateSiteKeys, spaEncrypt, storeEncryptedKey, getX25519Identity, enrollUserImport } from "../api";
+import { saveConnection, validatePortsJson, generateSiteKeys, spaEncrypt, storeEncryptedKey, getX25519Identity, enrollUserImport, setSetting } from "../api";
 
 interface Props {
   connection: Connection | null;
@@ -97,6 +97,7 @@ export default function ConnectionForm({ connection, clients, onSave, onClose }:
         try {
           const encrypted = await spaEncrypt(adminPrivKey);
           await storeEncryptedKey(data.spaSiteId!, encrypted);
+          await setSetting(`kp_${data.spaSiteId}_origin`, spaMode);
           data.spaCredential = `kp_${data.spaSiteId}_priv`;
           setSaveError("");
         } catch (e) {
@@ -191,9 +192,8 @@ export default function ConnectionForm({ connection, clients, onSave, onClose }:
               <textarea value={form.knockPorts} onChange={(e) => validatePorts(e.target.value)} rows={3} className={`w-full px-3 py-2 rounded-lg bg-slate-800 border text-sm font-mono focus:outline-none resize-none ${saveError ? "border-red-500/50" : "border-slate-600/50 focus:border-emerald-500/50"}`} spellCheck={false} />
               {saveError && <p className="text-xs text-red-400 mt-1">{saveError}</p>}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-xs font-medium text-slate-400 mb-1">Protocol</label><select value={form.knockProtocol} onChange={(e) => set("knockProtocol", e.target.value)} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600/50 text-sm focus:outline-none focus:border-emerald-500/50"><option value="udp">UDP</option><option value="tcp">TCP</option></select></div>
-              <div><label className="block text-xs font-medium text-slate-400 mb-1">Delay (ms)</label><input type="number" value={form.knockDelayMs} onChange={(e) => set("knockDelayMs", Math.max(10, Number(e.target.value) || 100))} min={10} step={10} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600/50 text-sm focus:outline-none focus:border-emerald-500/50" /></div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Delay (ms)</label><input type="number" value={form.knockDelayMs} onChange={(e) => set("knockDelayMs", Math.max(10, Number(e.target.value) || 100))} min={10} step={10} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600/50 text-sm focus:outline-none focus:border-emerald-500/50" />
             </div>
           </>)}
         </div>

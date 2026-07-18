@@ -215,16 +215,42 @@ pnpm exec eslint src/
 [dependencies]
 tauri = { version = "2", features = [] }        # Tauri 框架
 tauri-plugin-dialog = "2"                        # 原生文件选择器
-rusqlite = { version = "0.31", features = ["bundled"] }  # SQLite (内置编译)
+rusqlite = { version = "0.31", features = ["bundled"] }  # SQLite
 serde = { version = "1", features = ["derive"] }  # 序列化
 serde_json = "1"                                  # JSON
 dirs = "5"                                        # 系统目录
-glob = "0.3"                                      # 文件通配 (Windows 检测)
+glob = "0.3"                                      # 文件通配
+ed25519-dalek = "2"                               # Ed25519 签名
+curve25519-dalek = "4"                            # X25519 ECDH
+aes-gcm = "0.10"                                  # AES-256-GCM
+sha2 = "0.10"                                     # SHA-256
+hmac = "0.12"                                     # HMAC-SHA256
+hex = "0.4"                                       # Hex 编解码
+rand = "0.8"                                      # 随机数
+hostname = "0.4"                                  # 主机名 (设备指纹)
 log = "0.4"                                       # 日志
 env_logger = "0.11"                               # 环境变量日志
 ```
 
 ### 4.2 模块设计
+
+```
+lib.rs ─── 注册插件、初始化数据库、注册命令、启动应用
+  ├── commands.rs   ←── Tauri IPC (前端调用)
+  │     ├── db.rs           (SQLite CRUD + 加密迁移)
+  │     ├── knock.rs        (端口敲门)
+  │     ├── knockpass.rs    (SPA: Ed25519+X25519+AES+动态端口)
+  │     ├── crypto_store.rs (AES-256-GCM 加密存储)
+  │     ├── spa_cmds.rs     (SPA 加密/解密命令)
+  │     └── launcher.rs     (SSH客户端检测 + 启动)
+  └── models.rs      ←── 共享数据结构
+```
+
+**设计原则**:
+- knockpass.rs 只做加密运算，不直接访问存储
+- 所有密钥通过 crypto_store.rs 加密后存入 SQLite settings 表
+- 加密密钥由 `SHA256(设备指纹 + pepper)` 派生
+- 前台 Save 时调用 `spaEncrypt` → `storeEncryptedKey` 写入 DB
 
 ```
 lib.rs ─── 注册插件、初始化数据库、注册命令、启动应用
@@ -537,7 +563,19 @@ pnpm tauri build --target x86_64-pc-windows-gnu
 pnpm tauri build  # 自动生成 .dmg
 ```
 
-### 8.5 版本号管理
+### 8.5 浏览器扩展安装
+
+```bash
+# 安装 Native Messaging Host manifest
+sudo ./install/install-linux.sh <extension-id> [chrome|edge|chromium|brave]
+
+# 然后加载扩展: chrome://extensions → Dev mode → Load unpacked → extension/
+```
+
+扩展通过 `chrome.runtime.sendNativeMessage("com.knockd.client", ...)` 与二进制通信。
+二进制检测到 `chrome-extension://` 参数自动进入 Native Host 模式。
+
+### 8.6 版本号管理
 
 在三个地方同步更新版本号：
 

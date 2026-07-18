@@ -26,7 +26,13 @@ export default function SettingsPanel({ onClose }: Props) {
       ]);
       if (dc) setDefaultClient(dc); if (dd) setDefaultDelay(dd); setClients(cli);
       if (cp) { try { setCustomEntries(JSON.parse(cp)); } catch { /* ignore */ } }
-      setSpaSites(conns.filter((c: Connection) => c.authMethod === "knockpass"));
+      const spaConns = conns.filter((c: Connection) => c.authMethod === "knockpass");
+      const adminOnly = [];
+      for (const c of spaConns) {
+        const origin = await getSetting(`kp_${c.spaSiteId || c.name}_origin`);
+        if (origin !== "user") adminOnly.push(c);
+      }
+      setSpaSites(adminOnly);
     })();
   }, []);
 
