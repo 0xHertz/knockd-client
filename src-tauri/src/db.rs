@@ -18,9 +18,6 @@ impl Database {
         std::fs::create_dir_all(app_dir).ok();
         let db_path = app_dir.join("knockd.db");
         let db_key = crate::crypto_store::derive_db_key();
-        if db_path.exists() {
-            let _ = std::fs::remove_file(&db_path);
-        }
         let conn = SqliteConnection::open(&db_path)?;
         conn.execute_batch(&format!("PRAGMA key = \"x'{}'\";", db_key))?;
         let db = Database { conn: Mutex::new(conn) };
