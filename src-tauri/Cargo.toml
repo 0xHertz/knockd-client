@@ -37,4 +37,3 @@ openssl = { version = "0.10", features = ["vendored"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 rusqlite = { version = "0.31", features = ["bundled-sqlcipher"] }
-openssl = { version = "0.10", features = ["vendored"] }
