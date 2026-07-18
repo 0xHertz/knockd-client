@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from "react";
 import type { Connection, SshClient } from "../types";
-import { saveConnection, validatePortsJson, generateSiteKeys, saveSiteKey, enrollUserStart, enrollUserImport } from "../api";
+import { saveConnection, validatePortsJson, generateSiteKeys, spaEncrypt, storeEncryptedKey, getX25519Identity, enrollUserImport } from "../api";
 
 interface Props {
   connection: Connection | null;
@@ -31,14 +31,14 @@ export default function ConnectionForm({ connection, clients, onSave, onClose }:
   const [userPubKey, setUserPubKey] = useState("");
   const [importBlob, setImportBlob] = useState("");
   const [saving, setSaving] = useState(false);
-  const [portError, setPortError] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [showHints, setShowHints] = useState(false);
   const isKnockPass = (form.authMethod || "knockd") === "knockpass";
 
   const handleEnrollAdmin = async () => {
     if (!form.spaSiteId) return;
     try {
-      const r = await generateSiteKeys(form.spaSiteId);
+      const r = await generateSiteKeys();
       const parsed = JSON.parse(r);
       setAdminPubKey(parsed.public_key);
       setAdminPrivKey(parsed.private_key);
@@ -48,39 +48,35 @@ export default function ConnectionForm({ connection, clients, onSave, onClose }:
 
   const loadUserIdentity = async () => {
     try {
-      const r = await enrollUserStart("_", "_");
-      const parsed = JSON.parse(r);
-      setUserPubKey(parsed.x25519_public_key);
+      const [xpub] = await getX25519Identity();
+      setUserPubKey(xpub);
     } catch { /* ignore */ }
   };
 
   const handleEnrollUserGen = async () => {
-    if (!form.spaSiteId || !form.name) return;
     try {
-      const r = await enrollUserStart(form.spaSiteId, form.name);
-      const parsed = JSON.parse(r);
-      setUserPubKey(parsed.x25519_public_key);
-      setSpaResult(r);
+      const [xpub] = await getX25519Identity();
+      setUserPubKey(xpub);
+      setSpaResult("Send this public key to admin.");
     } catch (e) { setSpaResult(`Error: ${e}`); }
   };
 
   const handleEnrollUserImport = async () => {
-    if (!form.spaSiteId || !importBlob) return;
+    if (!importBlob.trim()) { setSpaResult("Paste the encrypted blob from admin first."); return; }
     try {
-      const r = await enrollUserImport(form.spaSiteId, form.name, form.launchUri || `${webProtocol}://${form.host}`, importBlob);
-      const parsed = JSON.parse(r);
-      if (parsed.private_key) setAdminPrivKey(parsed.private_key);
+      setSpaResult("Decrypting...");
+      const r = await enrollUserImport(importBlob.trim());
+      setAdminPrivKey(r);
       setSpaResult("Key decrypted. Will be saved when you click Save.");
       setImportBlob("");
-      set("spaCredential", `kp_${form.spaSiteId}_priv`);
-    } catch (e) { setSpaResult(`Error: ${e}`); }
+    } catch (e) { setSpaResult("Decrypt error: " + String(e)); }
   };
 
   useEffect(() => { if (connection) setForm(connection); }, [connection]);
 
   const set = (k: keyof Connection, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
-  const validatePorts = async (json: string) => { set("knockPorts", json); if (!json.trim()) { setPortError(""); return; } try { await validatePortsJson(json); setPortError(""); } catch (e) { setPortError(String(e)); } };
-  const handleTypeChange = (t: "ssh" | "web") => { set("connType", t); set("knockPorts", portHints[t] || emptyForm.knockPorts); setPortError(""); };
+  const validatePorts = async (json: string) => { set("knockPorts", json); if (!json.trim()) { setSaveError(""); return; } try { await validatePortsJson(json); setSaveError(""); } catch (e) { setSaveError(String(e)); } };
+  const handleTypeChange = (t: "ssh" | "web") => { set("connType", t); set("knockPorts", portHints[t] || emptyForm.knockPorts); setSaveError(""); };
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     if (!form.name.trim() || !form.host.trim()) return;
@@ -94,16 +90,24 @@ export default function ConnectionForm({ connection, clients, onSave, onClose }:
       // Save site key to keyring when Save is clicked
       if (data.authMethod === "knockpass") {
         if (!adminPrivKey) {
-          setPortError("No private key! Click 'Generate Keys' first.");
+          setSaveError("No private key! Click 'Generate Keys' first.");
           setSaving(false);
           return;
         }
-        await saveSiteKey(data.spaSiteId!, adminPrivKey);
-        data.spaCredential = `kp_${data.spaSiteId}_priv`;
+        try {
+          const encrypted = await spaEncrypt(adminPrivKey);
+          await storeEncryptedKey(data.spaSiteId!, encrypted);
+          data.spaCredential = `kp_${data.spaSiteId}_priv`;
+          setSaveError("");
+        } catch (e) {
+          setSaveError("Keyring save failed: " + String(e));
+          setSaving(false);
+          return;
+        }
       }
       await saveConnection(data);
       onSave();
-    } catch (err) { setPortError(String(err)); }
+    } catch (err) { setSaveError(String(err)); }
     setSaving(false);
   };
 
@@ -135,7 +139,7 @@ export default function ConnectionForm({ connection, clients, onSave, onClose }:
 
           <div className="flex gap-2">
             <button type="button" onClick={() => { set("authMethod", "knockd"); set("knockPorts", portHints[form.connType] || emptyForm.knockPorts); }} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${!isKnockPass ? "bg-emerald-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}>🔓 Port Knocking</button>
-            <button type="button" onClick={() => { set("authMethod", "knockpass"); if (!form.spaSiteId) set("spaSiteId", form.name || ""); }} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${isKnockPass ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}>🔐 KnockPass SPA</button>
+            <button type="button" onClick={() => { set("authMethod", "knockpass"); set("knockPorts", ""); if (!form.spaSiteId) set("spaSiteId", form.name || ""); }} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-colors ${isKnockPass ? "bg-amber-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}>🔐 KnockPass SPA</button>
           </div>
 
           {isKnockPass ? (
@@ -175,6 +179,7 @@ export default function ConnectionForm({ connection, clients, onSave, onClose }:
                   )}
                   <div><label className="block text-xs font-medium text-slate-400 mb-1">Paste Admin Encrypted Blob</label><textarea value={importBlob} onChange={(e) => setImportBlob(e.target.value)} rows={3} placeholder="From admin-tool output..." className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600/50 text-xs font-mono focus:outline-none focus:border-amber-500/50 resize-none" spellCheck={false} /></div>
                   <button type="button" onClick={handleEnrollUserImport} className="w-full py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm font-medium transition-colors">🔓 Decrypt & Import</button>
+                  {spaResult && <p className="text-[11px] text-emerald-400 mt-1">{spaResult}</p>}
                 </div>
               )}
 
@@ -183,8 +188,8 @@ export default function ConnectionForm({ connection, clients, onSave, onClose }:
             <div>
               <div className="flex items-center justify-between mb-1"><label className="text-xs font-medium text-slate-400">Knock Ports (JSON)</label><button type="button" onClick={() => setShowHints(!showHints)} className="text-[10px] text-emerald-400 hover:text-emerald-300">{showHints ? "Hide" : "Show"} examples</button></div>
               {showHints && (<div className="mb-2 space-y-1">{[{label:"3-step UDP",json:'[{"protocol":"udp","port":7000},{"protocol":"udp","port":8000},{"protocol":"udp","port":9000}]'},{label:"TCP+UDP mix",json:'[{"protocol":"tcp","port":4444},{"protocol":"udp","port":5555}]'},{label:"Simple single",json:'[{"protocol":"udp","port":12345}]'}].map((h)=>(<button key={h.label} type="button" onClick={() => validatePorts(h.json)} className="block w-full text-left text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200 font-mono">{h.label}: {h.json}</button>))}</div>)}
-              <textarea value={form.knockPorts} onChange={(e) => validatePorts(e.target.value)} rows={3} className={`w-full px-3 py-2 rounded-lg bg-slate-800 border text-sm font-mono focus:outline-none resize-none ${portError ? "border-red-500/50" : "border-slate-600/50 focus:border-emerald-500/50"}`} spellCheck={false} />
-              {portError && <p className="text-xs text-red-400 mt-1">{portError}</p>}
+              <textarea value={form.knockPorts} onChange={(e) => validatePorts(e.target.value)} rows={3} className={`w-full px-3 py-2 rounded-lg bg-slate-800 border text-sm font-mono focus:outline-none resize-none ${saveError ? "border-red-500/50" : "border-slate-600/50 focus:border-emerald-500/50"}`} spellCheck={false} />
+              {saveError && <p className="text-xs text-red-400 mt-1">{saveError}</p>}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-xs font-medium text-slate-400 mb-1">Protocol</label><select value={form.knockProtocol} onChange={(e) => set("knockProtocol", e.target.value)} className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600/50 text-sm focus:outline-none focus:border-emerald-500/50"><option value="udp">UDP</option><option value="tcp">TCP</option></select></div>
@@ -193,9 +198,10 @@ export default function ConnectionForm({ connection, clients, onSave, onClose }:
           </>)}
         </div>
 
+{saveError && <div className="px-5 py-2 bg-red-900/40 border border-red-800/50 text-red-400 text-xs text-center">{saveError}</div>}
         <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-700/50">
           <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-sm transition-colors">Cancel</button>
-          <button type="submit" disabled={saving || !!portError} className="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{saving ? "Saving..." : connection ? "Update" : "Save"}</button>
+          <button type="submit" disabled={saving || !!saveError} className="px-6 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{saving ? "Saving..." : connection ? "Update" : "Save"}</button>
         </div>
       </form>
     </div>

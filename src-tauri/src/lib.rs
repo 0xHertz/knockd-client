@@ -1,4 +1,6 @@
 mod commands;
+mod crypto_store;
+mod spa_cmds;
 pub mod db;
 mod knock;
 pub mod knockpass;
@@ -34,10 +36,14 @@ pub fn run() {
             commands::detect_clients,
             commands::get_setting,
             commands::set_setting,
+            spa_cmds::spa_encrypt,
+            spa_cmds::spa_decrypt,
             commands::generate_site_keys,
-            commands::save_site_key,
-            commands::enroll_user_start,
+            commands::store_encrypted_key,
+            commands::get_x25519_identity,
+            
             commands::enroll_user_import,
+            commands::admin_encrypt_blob,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

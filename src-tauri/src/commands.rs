@@ -51,6 +51,8 @@ pub fn knock_and_connect(state: State<AppState>, connection_id: i64) -> Result<S
         if site_id.is_empty() || credential.is_empty() {
             return Err("KnockPass SPA requires site_id and credential".into());
         }
+        let key = state.db.get_setting(&format!("kp_{}_priv", site_id)).map_err(|e| format!("db: {}", e))?.unwrap_or_default();
+        let priv_key = if key.is_empty() { String::new() } else { crate::crypto_store::decrypt_value(&key).unwrap_or_default() };
         let msg = crate::knockpass::spa_knock(
             &conn.host,
             udp_port,
@@ -58,10 +60,16 @@ pub fn knock_and_connect(state: State<AppState>, connection_id: i64) -> Result<S
             credential,
             conn.username.as_deref().unwrap_or(""),
             &conn.host,
+            &priv_key,
         )?;
         if conn.conn_type == "web" {
             let url = conn.launch_uri.as_deref().unwrap_or(&conn.host);
             return launcher::launch_url(url).map(|m| format!("{} | {}", msg, m));
+        }
+        if conn.conn_type == "ssh" {
+            let client = conn.ssh_client.as_deref().unwrap_or("auto");
+            return launcher::launch_ssh(client, &conn.host, conn.port.unwrap_or(22), conn.username.as_deref().unwrap_or(""))
+                .map(|m| format!("{} | {}", msg, m));
         }
         return Ok(msg);
     }
@@ -170,26 +178,33 @@ pub fn set_setting(state: State<AppState>, key: String, value: String) -> Result
 }
 
 #[tauri::command]
-pub fn generate_site_keys(site_id: String) -> Result<String, String> {
-    crate::knockpass::generate_site_keys(&site_id)
+pub fn generate_site_keys() -> Result<String, String> {
+    crate::knockpass::generate_site_keys()
 }
 
 #[tauri::command]
-pub fn save_site_key(site_id: String, private_key: String) -> Result<(), String> {
-    crate::knockpass::save_site_key(&site_id, &private_key)
+pub fn store_encrypted_key(state: State<AppState>, site_id: String, encrypted_key: String) -> Result<(), String> {
+    state.db.set_setting(&format!("kp_{}_priv", site_id), &encrypted_key).map_err(|e| format!("db: {}", e))
 }
 
 #[tauri::command]
-pub fn enroll_user_start(site_id: String, name: String) -> Result<String, String> {
-    crate::knockpass::enroll_user_start(&site_id, &name)
+pub fn get_x25519_identity(state: State<AppState>) -> Result<(String, String), String> {
+    crate::knockpass::get_or_create_x25519_identity(&state.db)
 }
 
 #[tauri::command]
-pub fn enroll_user_import(site_id: String, name: String, url: String, encrypted_blob: String) -> Result<String, String> {
-    crate::knockpass::enroll_user_import(&site_id, &name, &url, &encrypted_blob)
+pub fn enroll_user_import(state: State<AppState>, encrypted_blob: String) -> Result<String, String> {
+    crate::knockpass::decrypt_import_blob(&state.db, &encrypted_blob)
 }
 
 #[tauri::command]
+pub fn admin_encrypt_blob(state: State<AppState>, site_id: String, user_x25519_pub: String) -> Result<String, String> {
+    let key_name = format!("kp_{}_priv", site_id);
+    let encrypted = state.db.get_setting(&key_name).map_err(|e| format!("db: {}", e))?
+        .ok_or("site key not found")?;
+    let site_priv = crate::crypto_store::decrypt_value(&encrypted).map_err(|e| format!("decrypt: {}", e))?;
+    crate::knockpass::admin_encrypt(&site_priv, &user_x25519_pub)
+}
 
 fn launch_ssh_or_custom(
     client: &str,
