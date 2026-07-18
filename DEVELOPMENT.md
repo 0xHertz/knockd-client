@@ -834,11 +834,31 @@ git push --tags
 |----|------|------|
 | tauri | 2.11 | 桌面框架 |
 | tauri-build | 2.6 | 构建脚本 |
-| tauri-plugin-opener | 2.5 | URL 打开 |
-| tauri-plugin-shell | 2.3 | 命令执行 |
-| rusqlite | 0.31 | SQLite (bundled) |
+| tauri-plugin-dialog | 2.7 | 文件选择器 |
+| rusqlite | 0.31 | SQLite (bundled-sqlcipher) |
+| ed25519-dalek | 2 | Ed25519 签名 |
+| curve25519-dalek | 4 | X25519 ECDH |
+| aes-gcm | 0.10 | AES-256-GCM |
+| sha2 | 0.10 | SHA-256 |
+| hmac | 0.12 | HMAC-SHA256 |
+| hex | 0.4 | Hex 编解码 |
 | serde | 1.0 | 序列化 |
 | react | 18.3 | UI 框架 |
 | typescript | 5.6+ | 类型系统 |
 | vite | 6.0+ | 构建工具 |
 | tailwindcss | 3.4 | CSS 框架 |
+
+## 附录 B: 调试加密数据库
+
+```bash
+# 安装 sqlcipher
+sudo apt install sqlcipher
+
+# 获取密钥并查询
+FP=$(knockd-client --activate)
+KEY=$(echo -n "${FP}|knockd-sqlcipher-v1" | sha256sum | cut -d' ' -f1)
+sqlcipher ~/.local/share/knockd-client/knockd.db \
+  "PRAGMA key=\"x'${KEY}'\"; SELECT name,conn_type,auth_method,host FROM connections;"
+```
+
+> 注意：必须用 `echo -n`，`<<<` 会带换行符导致 hash 不一致。

@@ -124,10 +124,21 @@ Custom clients: Settings → **Custom SSH Clients** → 📂 select .exe.
 | Layer | Mechanism |
 |-------|-----------|
 | SPA Encryption | AES-256-GCM |
-| SPA Signature | Ed25519 (or HMAC-SHA256 fallback) |
+| SPA Signature | Ed25519 (HMAC-SHA256 fallback) |
 | Key Storage | AES-256-GCM, key = SHA256(device fingerprint + pepper) |
 | Key Distribution | X25519 ECDH + AES-256-GCM (admin → user) |
-| Dynamic Port | HMAC-SHA256 time-slot based, changes every 60s |
+| Dynamic Port | HMAC-SHA256 time-slot (changes every 60s) |
+| Database File | SQLCipher AES-256, key derived from device fingerprint |
+| Port Sequences | AES-256-GCM encrypted in SQLite |
+
+### Debugging Encrypted Database
+
+```bash
+FP=$(knockd-client --activate)
+KEY=$(echo -n "${FP}|knockd-sqlcipher-v1" | sha256sum | cut -d' ' -f1)
+sqlcipher ~/.local/share/knockd-client/knockd.db \
+  "PRAGMA key=\"x'${KEY}'\"; SELECT name,conn_type,auth_method,host FROM connections;"
+```
 
 ## Tech Stack
 
