@@ -16,4 +16,7 @@ export async function storeEncryptedKey(siteId: string, encryptedKey: string): P
 export async function getX25519Identity(): Promise<[string,string]> { return invoke("get_x25519_identity"); }
 export async function enrollUserImport(encryptedBlob: string): Promise<string> { return invoke("enroll_user_import", { encryptedBlob }); }
 export async function adminEncryptBlob(siteId: string, userX25519Pub: string): Promise<string> { return invoke("admin_encrypt_blob", { siteId, userX25519Pub }); }
+export async function adminEncryptBatch(siteId: string, csvContent: string): Promise<string> { return invoke("admin_encrypt_batch", { siteId, csvContent }); }
+export async function readFileContent(path: string): Promise<string> { return invoke("read_file_content", { path }); }
+export async function writeFileContent(path: string, content: string): Promise<void> { return invoke("write_file_content", { path, content }); }
 export async function adminEncrypt(siteId: string, userX25519Pub: string): Promise<string> { return invoke("admin_encrypt", { siteId, userX25519Pub }); }

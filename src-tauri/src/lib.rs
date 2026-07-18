@@ -44,6 +44,9 @@ pub fn run() {
             
             commands::enroll_user_import,
             commands::admin_encrypt_blob,
+            commands::admin_encrypt_batch,
+            commands::read_file_content,
+            commands::write_file_content,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

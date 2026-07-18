@@ -206,6 +206,26 @@ pub fn admin_encrypt_blob(state: State<AppState>, site_id: String, user_x25519_p
     crate::knockpass::admin_encrypt(&site_priv, &user_x25519_pub)
 }
 
+#[tauri::command]
+pub fn admin_encrypt_batch(state: State<AppState>, site_id: String, csv_content: String) -> Result<String, String> {
+    let key_name = format!("kp_{}_priv", site_id);
+    let encrypted = state.db.get_setting(&key_name).map_err(|e| format!("db: {}", e))?
+        .ok_or("site key not found")?;
+    let site_priv = crate::crypto_store::decrypt_value(&encrypted).map_err(|e| format!("decrypt: {}", e))?;
+    let mut results = Vec::new();
+    for line in csv_content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') { continue; }
+        let pub_key = line.split(',').next().unwrap_or(line).trim();
+        if pub_key.len() < 64 { results.push(format!("{},SKIP: too short", pub_key)); continue; }
+        match crate::knockpass::admin_encrypt(&site_priv, pub_key) {
+            Ok(blob) => results.push(format!("{},{}", pub_key, blob)),
+            Err(e) => results.push(format!("{},ERROR: {}", pub_key, e)),
+        }
+    }
+    Ok(results.join("\n"))
+}
+
 fn launch_ssh_or_custom(
     client: &str,
     state: &State<AppState>,
@@ -257,4 +277,14 @@ fn launch_ssh_or_custom(
     };
 
     Ok(format!("{} | {}", knock_msg, launch_msg))
+}
+
+#[tauri::command]
+pub fn read_file_content(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("read: {}", e))
+}
+
+#[tauri::command]
+pub fn write_file_content(path: String, content: String) -> Result<(), String> {
+    std::fs::write(&path, &content).map_err(|e| format!("write: {}", e))
 }
