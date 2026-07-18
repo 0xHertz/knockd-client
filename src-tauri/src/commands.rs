@@ -17,17 +17,16 @@ pub fn list_connections(state: State<AppState>) -> Result<Vec<Connection>, Strin
 
 #[tauri::command]
 pub fn save_connection(state: State<AppState>, connection: Connection) -> Result<i64, String> {
-    if let Some(id) = connection.id {
-        state
-            .db
-            .update_connection(&connection)
-            .map_err(|e| e.to_string())?;
+    let mut conn = connection;
+    // Encrypt knock ports before storing
+    if !conn.knock_ports.is_empty() && conn.knock_ports != "[]" {
+        conn.knock_ports = crate::crypto_store::encrypt_value(&conn.knock_ports)?;
+    }
+    if let Some(id) = conn.id {
+        state.db.update_connection(&conn).map_err(|e| e.to_string())?;
         Ok(id)
     } else {
-        state
-            .db
-            .insert_connection(&connection)
-            .map_err(|e| e.to_string())
+        state.db.insert_connection(&conn).map_err(|e| e.to_string())
     }
 }
 

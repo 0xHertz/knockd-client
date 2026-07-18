@@ -4,12 +4,17 @@ use rand::RngCore;
 use sha2::{Digest, Sha256};
 
 fn derive_key() -> Result<[u8; 32], String> {
-    // Mix device fingerprint with a stored salt for key derivation
     let fp = crate::knockpass::device_fingerprint()?;
-    // Fixed app-level pepper (not secret, just adds entropy)
     let pepper = "knockd-client-v1-master-key";
     let material = format!("{}|{}", fp, pepper);
     Ok(Sha256::digest(material.as_bytes()).into())
+}
+
+pub fn derive_db_key() -> String {
+    let fp = crate::knockpass::device_fingerprint().unwrap_or_default();
+    let pepper = "knockd-sqlcipher-v1";
+    let material = format!("{}|{}", fp, pepper);
+    hex::encode(Sha256::digest(material.as_bytes()))
 }
 
 pub fn encrypt_value(plaintext: &str) -> Result<String, String> {

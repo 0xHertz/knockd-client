@@ -4,6 +4,11 @@ use std::sync::Mutex;
 
 use crate::models::Connection;
 
+fn decrypt_ports(raw: String) -> String {
+    if raw.is_empty() || raw == "[]" { return raw; }
+    crate::crypto_store::decrypt_value(&raw).unwrap_or(raw)
+}
+
 pub struct Database {
     conn: Mutex<SqliteConnection>,
 }
@@ -12,10 +17,13 @@ impl Database {
     pub fn new(app_dir: &PathBuf) -> SqliteResult<Self> {
         std::fs::create_dir_all(app_dir).ok();
         let db_path = app_dir.join("knockd.db");
-        let conn = SqliteConnection::open(db_path)?;
-        let db = Database {
-            conn: Mutex::new(conn),
-        };
+        let db_key = crate::crypto_store::derive_db_key();
+        if db_path.exists() {
+            let _ = std::fs::remove_file(&db_path);
+        }
+        let conn = SqliteConnection::open(&db_path)?;
+        conn.execute_batch(&format!("PRAGMA key = \"x'{}'\";", db_key))?;
+        let db = Database { conn: Mutex::new(conn) };
         db.initialize()?;
         Ok(db)
     }
@@ -91,7 +99,7 @@ impl Database {
                 port: row.get(4)?,
                 username: row.get(5)?,
                 ssh_client: row.get(6)?,
-                knock_ports: row.get(7)?,
+                knock_ports: decrypt_ports(row.get::<_,String>(7)?),
                 knock_protocol: row.get(8)?,
                 knock_delay_ms: row.get(9)?,
                 launch_uri: row.get(10)?,
@@ -128,7 +136,7 @@ impl Database {
                 port: row.get(4)?,
                 username: row.get(5)?,
                 ssh_client: row.get(6)?,
-                knock_ports: row.get(7)?,
+                knock_ports: decrypt_ports(row.get::<_,String>(7)?),
                 knock_protocol: row.get(8)?,
                 knock_delay_ms: row.get(9)?,
                 launch_uri: row.get(10)?,
