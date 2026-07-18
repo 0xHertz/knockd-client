@@ -87,8 +87,8 @@ pub fn knock_and_connect(state: State<AppState>, connection_id: i64) -> Result<S
     match conn.conn_type.as_str() {
         "ssh" => {
             let client = conn.ssh_client.clone().unwrap_or_else(|| "auto".into());
-            let result = launch_ssh_or_custom(&client, &state, &conn, result.message);
-            result
+            
+            launch_ssh_or_custom(&client, &state, &conn, result.message)
         }
         "web" => {
             let url = conn.launch_uri.clone().unwrap_or_else(|| {

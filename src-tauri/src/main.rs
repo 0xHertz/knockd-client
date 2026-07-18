@@ -11,11 +11,7 @@ fn run_native_host() {
     };
     let mut stdin = io::stdin();
     let mut stdout = io::stdout();
-    loop {
-        let req = match read_msg(&mut stdin) {
-            Ok(r) => r,
-            Err(_) => break,
-        };
+    while let Ok(req) = read_msg(&mut stdin) {
         let resp = knockpass::dispatch_with_db(&req, &database);
         let json = serde_json::to_vec(&resp).unwrap_or_default();
         let _ = write_msg(&mut stdout, &json);

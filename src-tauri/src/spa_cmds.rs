@@ -1,4 +1,3 @@
-use tauri;
 
 #[tauri::command]
 pub fn spa_encrypt(plaintext: String) -> Result<String, String> {

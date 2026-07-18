@@ -111,7 +111,7 @@ pub fn spa_knock(host: &str, udp_port: u16, site_id: &str, credential: &str, use
     let port=if udp_port>0{udp_port}else{dyn_port(site_id,priv_key)};
     let sck=UdpSocket::bind("0.0.0.0:0").map_err(|e|format!("bind: {}",e))?;
     sck.set_write_timeout(Some(Duration::from_secs(5))).ok();
-    sck.send_to(&enc,&format!("{}:{}",host,port)).map_err(|e|format!("send: {}",e))?;
+    sck.send_to(&enc,format!("{}:{}",host,port)).map_err(|e|format!("send: {}",e))?;
     Ok(format!("SPA sent to {}:{}",host,port))
 }
 
@@ -143,7 +143,7 @@ pub fn dispatch_with_db(req: &BrowserRequest, db: &crate::db::Database) -> Brows
             Ok(conns) => {
                 let sites: Vec<serde_json::Value> = conns.into_iter()
                     .filter(|c| c.auth_method == "knockpass" && c.conn_type == "web")
-                    .map(|c| serde_json::json!({"site_id": c.spa_site_id.unwrap_or_default(), "name": c.name, "url": c.launch_uri.unwrap_or_else(|| c.host)}))
+                    .map(|c| serde_json::json!({"site_id": c.spa_site_id.unwrap_or_default(), "name": c.name, "url": c.launch_uri.unwrap_or(c.host)}))
                     .collect();
                 BrowserResponse{success:true,message:serde_json::to_string(&sites).unwrap_or_default()}
             }
