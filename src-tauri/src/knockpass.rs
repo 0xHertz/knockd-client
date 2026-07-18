@@ -78,7 +78,7 @@ pub fn save_site_store(s: &HashMap<String, SiteMapping>) -> Result<(), String> {
 }
 
 pub fn device_fingerprint() -> Result<String, String> {
-    let mut parts = Vec::new();
+    let mut parts: Vec<String> = Vec::new();
     #[cfg(target_os = "linux")] {
         for p in &["/etc/machine-id", "/var/lib/dbus/machine-id"] {
             if let Ok(d) = std::fs::read_to_string(p) { parts.push(d.trim().into()); break; }
