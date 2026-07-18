@@ -36,6 +36,12 @@ jobs:
           path: |
             src-tauri/target/release/bundle/deb/*.deb
             src-tauri/target/release/knockd-client
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension
+          path: |
+            extension/
+            install/
 
   build-windows:
     runs-on: windows-latest
@@ -105,3 +111,4 @@ jobs:
             linux-deb/**/*
             windows-installer/**/*
             macos-dmg/**/*
+            extension/**/*
