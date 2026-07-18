@@ -251,6 +251,8 @@ lib.rs ─── 注册插件、初始化数据库、注册命令、启动应用
 - 所有密钥通过 crypto_store.rs 加密后存入 SQLite settings 表
 - 加密密钥由 `SHA256(设备指纹 + pepper)` 派生
 - 前台 Save 时调用 `spaEncrypt` → `storeEncryptedKey` 写入 DB
+- SPA 包格式与 [knockpass-server](https://github.com/0xHertz/knockpass) 完全兼容：
+  Ed25519 签名 + AES-256-GCM(priv_key) + HMAC-SHA256 动态端口
 
 ```
 lib.rs ─── 注册插件、初始化数据库、注册命令、启动应用

@@ -10,6 +10,7 @@ Built with **Tauri v2** (Rust + React + TypeScript + Tailwind CSS).
 - **KnockPass SPA** — Ed25519 signature + AES-256-GCM encrypted Single Packet Authorization
 - **Dynamic Port** — Time-based rotating UDP port (changes every 60s)
 - **Admin/User Enrollment** — Admin generates keys, users import encrypted keys via X25519 ECDH
+- **Compatible with [knockpass-server](https://github.com/0xHertz/knockpass)** — SPA packets verified by knockpass server daemon
 - **SSH + Web** — Knock then auto-launch SSH client or browser
 - **10+ SSH Clients** — Auto-detection via filesystem + Windows Registry + manual file picker
 - **Browser Extension** — Chrome/Edge popup with auto-knock on navigation, site list from desktop app
