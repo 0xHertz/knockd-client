@@ -107,8 +107,8 @@ pub fn spa_knock(host: &str, udp_port: u16, site_id: &str, credential: &str, use
     let sig=sign_ed25519(priv_key,&msg).unwrap_or_else(|_|{let mut m=hmac::Hmac::<Sha256>::new_from_slice(credential.as_bytes()).unwrap();hmac::Mac::update(&mut m,msg.as_bytes());hex::encode(hmac::Mac::finalize(m).into_bytes())});
     let pkt=AuthPacket{version:1,site_id:site_id.into(),timestamp:now,nonce:nonce_h,user:user.into(),target:target.into(),signature:sig};
     let pt=serde_json::to_vec(&pkt).map_err(|e|format!("json: {}",e))?;
-    let enc=aes_enc(&pt,credential)?;
-    let port=if udp_port>0{udp_port}else{dyn_port(site_id,credential)};
+    let enc=aes_enc(&pt,priv_key)?;
+    let port=if udp_port>0{udp_port}else{dyn_port(site_id,priv_key)};
     let sck=UdpSocket::bind("0.0.0.0:0").map_err(|e|format!("bind: {}",e))?;
     sck.set_write_timeout(Some(Duration::from_secs(5))).ok();
     sck.send_to(&enc,&format!("{}:{}",host,port)).map_err(|e|format!("send: {}",e))?;
