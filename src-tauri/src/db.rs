@@ -19,7 +19,6 @@ impl Database {
         let db_path = app_dir.join("knockd.db");
         let db_key = crate::crypto_store::derive_db_key();
         let conn = SqliteConnection::open(&db_path)?;
-        #[cfg(target_os = "linux")]
         conn.execute_batch(&format!("PRAGMA key = \"x'{}'\";", db_key))?;
         let db = Database { conn: Mutex::new(conn) };
         db.initialize()?;
