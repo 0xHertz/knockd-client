@@ -51,10 +51,10 @@ jobs:
         run: |
           git clone https://github.com/microsoft/vcpkg.git
           .\vcpkg\bootstrap-vcpkg.bat
-          .\vcpkg\vcpkg install openssl:x64-windows
-          echo "OPENSSL_DIR=${{ github.workspace }}\vcpkg\installed\x64-windows" >> $env:GITHUB_ENV
-          echo "OPENSSL_LIB_DIR=${{ github.workspace }}\vcpkg\installed\x64-windows\lib" >> $env:GITHUB_ENV
-          echo "OPENSSL_INCLUDE_DIR=${{ github.workspace }}\vcpkg\installed\x64-windows\include" >> $env:GITHUB_ENV
+          .\vcpkg\vcpkg install openssl:x64-windows-static
+          echo "OPENSSL_DIR=${{ github.workspace }}\vcpkg\installed\x64-windows-static" >> $env:GITHUB_ENV
+          echo "OPENSSL_LIB_DIR=${{ github.workspace }}\vcpkg\installed\x64-windows-static\lib" >> $env:GITHUB_ENV
+          echo "OPENSSL_INCLUDE_DIR=${{ github.workspace }}\vcpkg\installed\x64-windows-static\include" >> $env:GITHUB_ENV
       - run: pnpm install
       - run: pnpm tauri build
       - shell: pwsh
