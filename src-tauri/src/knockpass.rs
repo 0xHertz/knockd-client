@@ -49,7 +49,7 @@ fn dyn_port(site_id: &str, secret: &str) -> u16 {
 pub fn device_fingerprint() -> Result<String,String> {
     let mut parts: Vec<String>=Vec::new();
     #[cfg(target_os="linux")]{for p in &["/etc/machine-id","/var/lib/dbus/machine-id"]{if let Ok(d)=std::fs::read_to_string(p){parts.push(d.trim().into());break;}}}
-    #[cfg(target_os="windows")]{if let Ok(o)=std::process::Command::new("powershell").args(["-NoProfile","-Command","(Get-CimInstance -Class Win32_ComputerSystemProduct).UUID"]).output(){parts.push(String::from_utf8_lossy(&o.stdout).trim().into());}}
+    #[cfg(target_os="windows")]{ use std::os::windows::process::CommandExt; const C: u32 = 0x08000000; if let Ok(o)=std::process::Command::new("powershell").args(["-NoProfile","-Command","(Get-CimInstance -Class Win32_ComputerSystemProduct).UUID"]).creation_flags(C).output(){parts.push(String::from_utf8_lossy(&o.stdout).trim().into());}}
     if let Ok(h)=hostname::get(){parts.push(h.to_string_lossy().into());}
     if parts.is_empty(){return Err("no hardware ids".into());}
     Ok(hex::encode(Sha256::digest(parts.join("|").as_bytes())))
