@@ -39,8 +39,7 @@ fn aes_dec(ciphertext: &[u8], key_material: &[u8]) -> Result<Vec<u8>, String> {
 
 fn dyn_port(site_id: &str, secret: &str) -> u16 {
     let slot=SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64/60;
-    let d=Sha256::digest(secret.as_bytes());
-    let mut mac=hmac::Hmac::<Sha256>::new_from_slice(&d).unwrap();
+    let mut mac=hmac::Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
     hmac::Mac::update(&mut mac, format!("{}:{}",site_id,slot).as_bytes());
     let r=hmac::Mac::finalize(mac).into_bytes();
     (u32::from_be_bytes([r[0],r[1],r[2],r[3]])%40000+20000) as u16
@@ -107,8 +106,9 @@ pub fn spa_knock(host: &str, udp_port: u16, site_id: &str, credential: &str, use
     let sig=sign_ed25519(priv_key,&msg).unwrap_or_else(|_|{let mut m=hmac::Hmac::<Sha256>::new_from_slice(credential.as_bytes()).unwrap();hmac::Mac::update(&mut m,msg.as_bytes());hex::encode(hmac::Mac::finalize(m).into_bytes())});
     let pkt=AuthPacket{version:1,site_id:site_id.into(),timestamp:now,nonce:nonce_h,user:user.into(),target:target.into(),signature:sig};
     let pt=serde_json::to_vec(&pkt).map_err(|e|format!("json: {}",e))?;
-    let enc=aes_enc(&pt,priv_key)?;
-    let port=if udp_port>0{udp_port}else{dyn_port(site_id,priv_key)};
+    let pub_key=derive_pub(priv_key)?;
+    let enc=aes_enc(&pt,&pub_key)?;
+    let port=if udp_port>0{udp_port}else{dyn_port(site_id,&pub_key)};
     let sck=UdpSocket::bind("0.0.0.0:0").map_err(|e|format!("bind: {}",e))?;
     sck.set_write_timeout(Some(Duration::from_secs(5))).ok();
     sck.send_to(&enc,format!("{}:{}",host,port)).map_err(|e|format!("send: {}",e))?;
