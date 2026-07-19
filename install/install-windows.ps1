@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 $BIN_PATH = "$env:ProgramFiles\Knockd Client\knockd-client.exe"
 if (-not (Test-Path $BIN_PATH)) {
-    $BIN_PATH = "$env:LOCALAPPDATA\Programs\knockd-client\knockd-client.exe"
+    $BIN_PATH = "$env:LOCALAPPDATA\Knockd Client\knockd-client.exe"
 }
 
 if ($Browser -eq "edge") {
